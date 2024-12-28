@@ -19,6 +19,8 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.BookMeta;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.block.Chest;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
 
 import java.util.*;
 
@@ -164,6 +166,9 @@ public class EffectManager implements Listener {
         BukkitTask fogTask = activeFogTasks.remove(player.getUniqueId());
         if (fogTask != null) {
             fogTask.cancel();
+            // Remove fog potion effects
+            player.removePotionEffect(PotionEffectType.BLINDNESS);
+            player.removePotionEffect(PotionEffectType.DARKNESS);
         }
     }
 
@@ -249,55 +254,45 @@ public class EffectManager implements Listener {
         double density = plugin.getConfigManager().getFogDensity();
         int duration = plugin.getConfigManager().getFogDuration();
 
-        // Create fog particles in a dome around the player
+        // Calculate effect amplifiers based on density
+        int blindnessAmplifier = (int) Math.round(density * 2); // 0-2
+        int darknessAmplifier = (int) Math.round(density * 3); // 0-3
+
+        // Apply initial effects
+        player.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, duration, blindnessAmplifier, false, false));
+        player.addPotionEffect(new PotionEffect(PotionEffectType.DARKNESS, duration, darknessAmplifier, false, false));
+
+        // Create ambient effects task
         BukkitTask fogTask = new BukkitRunnable() {
             int ticks = 0;
-            final double MAX_RADIUS = 20.0;
-            final double HEIGHT = 10.0;
 
             @Override
             public void run() {
                 if (!player.isOnline() || ticks >= duration) {
                     cancel();
                     activeFogTasks.remove(player.getUniqueId());
+                    // Remove effects when done
+                    player.removePotionEffect(PotionEffectType.BLINDNESS);
+                    player.removePotionEffect(PotionEffectType.DARKNESS);
                     return;
                 }
 
-                Location playerLoc = player.getLocation();
-                
-                // Create fog particles in a dome shape
-                for (double theta = 0; theta < 2 * Math.PI; theta += Math.PI / 8) {
-                    for (double radius = 2; radius < MAX_RADIUS; radius += 4) {
-                        double x = radius * Math.cos(theta);
-                        double z = radius * Math.sin(theta);
-                        
-                        for (double y = 0; y < HEIGHT; y += 2) {
-                            Location fogLoc = playerLoc.clone().add(x, y, z);
-                            player.spawnParticle(
-                                Particle.CLOUD,
-                                fogLoc,
-                                1,
-                                0.8, 0.1, 0.8,
-                                density * 0.01
-                            );
-                        }
-                    }
-                }
-
-                // Add some random fog particles for more natural look
-                for (int i = 0; i < 5; i++) {
-                    double x = (random.nextDouble() - 0.5) * MAX_RADIUS * 2;
-                    double y = random.nextDouble() * HEIGHT;
-                    double z = (random.nextDouble() - 0.5) * MAX_RADIUS * 2;
-                    Location randLoc = playerLoc.clone().add(x, y, z);
-                    
-                    player.spawnParticle(
-                        Particle.CLOUD,
-                        randLoc,
-                        1,
-                        0.5, 0.1, 0.5,
-                        density * 0.01
+                // Add some ambient effects
+                if (random.nextDouble() < 0.2) { // 20% chance each tick
+                    Location effectLoc = player.getLocation().add(
+                        (random.nextDouble() - 0.5) * 10,
+                        random.nextDouble() * 3,
+                        (random.nextDouble() - 0.5) * 10
                     );
+                    
+                    // Minimal particle effects for atmosphere
+                    player.spawnParticle(Particle.CLOUD, effectLoc, 1, 0.5, 0.5, 0.5, 0);
+                    
+                    // Play subtle ambient sounds
+                    if (random.nextDouble() < 0.3) {
+                        float pitch = 0.5f + random.nextFloat() * 0.2f;
+                        player.playSound(effectLoc, Sound.AMBIENT_SOUL_SAND_VALLEY_MOOD, 0.2f, pitch);
+                    }
                 }
 
                 ticks++;

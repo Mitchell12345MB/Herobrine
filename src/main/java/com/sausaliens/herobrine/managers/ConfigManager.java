@@ -24,6 +24,12 @@ public class ConfigManager {
     private int torchManipulationRadius;
     private double torchConversionChance;
     private double torchRemovalChance;
+    // Advanced settings
+    private boolean debugMode;
+    private int maxAppearances;
+    private int appearanceDuration;
+    private int minAppearanceDistance;
+    private int maxAppearanceDistance;
 
     public ConfigManager(HerobrinePlugin plugin) {
         this.plugin = plugin;
@@ -51,6 +57,13 @@ public class ConfigManager {
         torchConversionChance = config.getDouble("effects.torch_conversion_chance", 0.7);
         torchRemovalChance = config.getDouble("effects.torch_removal_chance", 0.3);
         
+        // Load advanced settings
+        debugMode = config.getBoolean("advanced.debug", false);
+        maxAppearances = config.getInt("advanced.max_appearances", 1);
+        appearanceDuration = config.getInt("advanced.appearance_duration", 10);
+        minAppearanceDistance = config.getInt("advanced.min_appearance_distance", 15);
+        maxAppearanceDistance = config.getInt("advanced.max_appearance_distance", 25);
+        
         saveConfig();
     }
 
@@ -71,6 +84,14 @@ public class ConfigManager {
         config.set("effects.torch_manipulation_radius", torchManipulationRadius);
         config.set("effects.torch_conversion_chance", torchConversionChance);
         config.set("effects.torch_removal_chance", torchRemovalChance);
+        
+        // Save advanced settings
+        config.set("advanced.debug", debugMode);
+        config.set("advanced.max_appearances", maxAppearances);
+        config.set("advanced.appearance_duration", appearanceDuration);
+        config.set("advanced.min_appearance_distance", minAppearanceDistance);
+        config.set("advanced.max_appearance_distance", maxAppearanceDistance);
+        
         plugin.saveConfig();
     }
 
@@ -311,6 +332,52 @@ public class ConfigManager {
 
     public void setTorchRemovalChance(double chance) {
         this.torchRemovalChance = Math.min(1.0, Math.max(0.0, chance));
+        saveConfig();
+    }
+
+    // Advanced settings getters and setters
+    public boolean isDebugMode() {
+        return debugMode;
+    }
+
+    public void setDebugMode(boolean debugMode) {
+        this.debugMode = debugMode;
+        saveConfig();
+    }
+
+    public int getMaxAppearances() {
+        return maxAppearances;
+    }
+
+    public void setMaxAppearances(int maxAppearances) {
+        this.maxAppearances = Math.max(1, maxAppearances);
+        saveConfig();
+    }
+
+    public int getAppearanceDuration() {
+        return appearanceDuration;
+    }
+
+    public void setAppearanceDuration(int duration) {
+        this.appearanceDuration = Math.max(1, duration);
+        saveConfig();
+    }
+
+    public int getMinAppearanceDistance() {
+        return minAppearanceDistance;
+    }
+
+    public void setMinAppearanceDistance(int distance) {
+        this.minAppearanceDistance = Math.max(5, Math.min(distance, maxAppearanceDistance));
+        saveConfig();
+    }
+
+    public int getMaxAppearanceDistance() {
+        return maxAppearanceDistance;
+    }
+
+    public void setMaxAppearanceDistance(int distance) {
+        this.maxAppearanceDistance = Math.max(minAppearanceDistance, distance);
         saveConfig();
     }
 } 

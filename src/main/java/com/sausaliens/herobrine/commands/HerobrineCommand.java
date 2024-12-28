@@ -316,6 +316,99 @@ public class HerobrineCommand implements CommandExecutor {
                         return true;
                 }
 
+            case "advanced":
+                if (args.length < 3) {
+                    sendAdvancedConfigUsage(sender);
+                    return true;
+                }
+                switch (args[2].toLowerCase()) {
+                    case "debug":
+                        if (args.length < 4) {
+                            sender.sendMessage(ChatColor.RED + "Please specify true or false!");
+                            return true;
+                        }
+                        boolean debug = Boolean.parseBoolean(args[3]);
+                        plugin.getConfigManager().setDebugMode(debug);
+                        sender.sendMessage(ChatColor.GREEN + "Set debug mode to " + debug);
+                        return true;
+
+                    case "maxappearances":
+                        if (args.length < 4) {
+                            sender.sendMessage(ChatColor.RED + "Please specify a number!");
+                            return true;
+                        }
+                        try {
+                            int max = Integer.parseInt(args[3]);
+                            if (max < 1) {
+                                sender.sendMessage(ChatColor.RED + "Maximum appearances must be at least 1!");
+                                return true;
+                            }
+                            plugin.getConfigManager().setMaxAppearances(max);
+                            sender.sendMessage(ChatColor.GREEN + "Set maximum appearances to " + max);
+                        } catch (NumberFormatException e) {
+                            sender.sendMessage(ChatColor.RED + "Invalid number!");
+                        }
+                        return true;
+
+                    case "duration":
+                        if (args.length < 4) {
+                            sender.sendMessage(ChatColor.RED + "Please specify duration in seconds!");
+                            return true;
+                        }
+                        try {
+                            int duration = Integer.parseInt(args[3]);
+                            if (duration < 1) {
+                                sender.sendMessage(ChatColor.RED + "Duration must be at least 1 second!");
+                                return true;
+                            }
+                            plugin.getConfigManager().setAppearanceDuration(duration);
+                            sender.sendMessage(ChatColor.GREEN + "Set appearance duration to " + duration + " seconds");
+                        } catch (NumberFormatException e) {
+                            sender.sendMessage(ChatColor.RED + "Invalid duration!");
+                        }
+                        return true;
+
+                    case "mindistance":
+                        if (args.length < 4) {
+                            sender.sendMessage(ChatColor.RED + "Please specify minimum distance in blocks!");
+                            return true;
+                        }
+                        try {
+                            int distance = Integer.parseInt(args[3]);
+                            if (distance < 5) {
+                                sender.sendMessage(ChatColor.RED + "Minimum distance must be at least 5 blocks!");
+                                return true;
+                            }
+                            plugin.getConfigManager().setMinAppearanceDistance(distance);
+                            sender.sendMessage(ChatColor.GREEN + "Set minimum appearance distance to " + distance + " blocks");
+                        } catch (NumberFormatException e) {
+                            sender.sendMessage(ChatColor.RED + "Invalid distance!");
+                        }
+                        return true;
+
+                    case "maxdistance":
+                        if (args.length < 4) {
+                            sender.sendMessage(ChatColor.RED + "Please specify maximum distance in blocks!");
+                            return true;
+                        }
+                        try {
+                            int distance = Integer.parseInt(args[3]);
+                            if (distance < plugin.getConfigManager().getMinAppearanceDistance()) {
+                                sender.sendMessage(ChatColor.RED + "Maximum distance must be greater than minimum distance!");
+                                return true;
+                            }
+                            plugin.getConfigManager().setMaxAppearanceDistance(distance);
+                            sender.sendMessage(ChatColor.GREEN + "Set maximum appearance distance to " + distance + " blocks");
+                        } catch (NumberFormatException e) {
+                            sender.sendMessage(ChatColor.RED + "Invalid distance!");
+                        }
+                        return true;
+
+                    default:
+                        sendAdvancedConfigUsage(sender);
+                        return true;
+                }
+
             default:
                 sendConfigUsage(sender);
                 return true;
@@ -337,6 +430,7 @@ public class HerobrineCommand implements CommandExecutor {
         sender.sendMessage(ChatColor.YELLOW + "/herobrine config fog " + ChatColor.WHITE + "- Configure fog effects");
         sender.sendMessage(ChatColor.YELLOW + "/herobrine config footsteps " + ChatColor.WHITE + "- Configure footstep effects");
         sender.sendMessage(ChatColor.YELLOW + "/herobrine config torches " + ChatColor.WHITE + "- Configure torch manipulation");
+        sender.sendMessage(ChatColor.YELLOW + "/herobrine config advanced " + ChatColor.WHITE + "- Configure advanced settings");
     }
 
     private void sendFogConfigUsage(CommandSender sender) {
@@ -361,5 +455,14 @@ public class HerobrineCommand implements CommandExecutor {
         sender.sendMessage(ChatColor.YELLOW + "/herobrine config torches radius <blocks> " + ChatColor.WHITE + "- Set manipulation radius (5-20)");
         sender.sendMessage(ChatColor.YELLOW + "/herobrine config torches conversion <0-1> " + ChatColor.WHITE + "- Set torch conversion chance");
         sender.sendMessage(ChatColor.YELLOW + "/herobrine config torches removal <0-1> " + ChatColor.WHITE + "- Set torch removal chance");
+    }
+
+    private void sendAdvancedConfigUsage(CommandSender sender) {
+        sender.sendMessage(ChatColor.GOLD + "Advanced Configuration Commands:");
+        sender.sendMessage(ChatColor.YELLOW + "/herobrine config advanced debug <true/false> " + ChatColor.WHITE + "- Toggle debug mode");
+        sender.sendMessage(ChatColor.YELLOW + "/herobrine config advanced maxappearances <number> " + ChatColor.WHITE + "- Set maximum simultaneous appearances");
+        sender.sendMessage(ChatColor.YELLOW + "/herobrine config advanced duration <seconds> " + ChatColor.WHITE + "- Set how long Herobrine appears");
+        sender.sendMessage(ChatColor.YELLOW + "/herobrine config advanced mindistance <blocks> " + ChatColor.WHITE + "- Set minimum appearance distance");
+        sender.sendMessage(ChatColor.YELLOW + "/herobrine config advanced maxdistance <blocks> " + ChatColor.WHITE + "- Set maximum appearance distance");
     }
 } 

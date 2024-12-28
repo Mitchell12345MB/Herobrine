@@ -17,10 +17,10 @@ effects:
   stalking_enabled: true
   # Maximum distance for stalking (in blocks)
   max_stalk_distance: 50
-  # Enable/disable fog effects
+  # Enable/disable fog effects (uses blindness and darkness)
   fog_enabled: true
-  # Fog density (0.0 - 1.0)
-  fog_density: 0.8
+  # Fog intensity (0.0 - 1.0, affects blindness and darkness levels)
+  fog_density: 0.3
   # Duration of fog effects in ticks (20 ticks = 1 second)
   fog_duration: 200
   # Enable/disable footstep effects
