@@ -1,0 +1,74 @@
+name: Herobrine
+version: '${project.version}'
+main: com.sausaliens.herobrine.HerobrinePlugin
+api-version: '1.21'
+depend: [Citizens, ProtocolLib]
+authors: [Sausaliens]
+description: A plugin that adds Herobrine to your server
+commands:
+  herobrine:
+    description: Main command for controlling Herobrine
+    usage: /herobrine [enable|disable|spawn|config]
+    aliases: [hb]
+
+permissions:
+  herobrine.*:
+    description: Gives access to all Herobrine commands
+    default: op
+    children:
+      herobrine.admin: true
+      herobrine.command.*: true
+      herobrine.config.*: true
+  
+  herobrine.admin:
+    description: Allows enabling/disabling Herobrine
+    default: op
+    children:
+      herobrine.command.enable: true
+      herobrine.command.disable: true
+  
+  herobrine.command.*:
+    description: Gives access to all Herobrine commands
+    default: op
+    children:
+      herobrine.command.spawn: true
+      herobrine.command.spawn.others: true
+      herobrine.command.config: true
+  
+  herobrine.command.spawn:
+    description: Allows spawning Herobrine near yourself
+    default: op
+  
+  herobrine.command.spawn.others:
+    description: Allows spawning Herobrine near other players
+    default: op
+  
+  herobrine.command.enable:
+    description: Allows enabling Herobrine's activities
+    default: op
+  
+  herobrine.command.disable:
+    description: Allows disabling Herobrine's activities
+    default: op
+  
+  herobrine.command.config:
+    description: Allows modifying Herobrine's configuration
+    default: op
+    children:
+      herobrine.config.view: true
+      herobrine.config.edit: true
+  
+  herobrine.config.*:
+    description: Gives access to all configuration options
+    default: op
+    children:
+      herobrine.config.view: true
+      herobrine.config.edit: true
+  
+  herobrine.config.view:
+    description: Allows viewing Herobrine's configuration
+    default: op
+  
+  herobrine.config.edit:
+    description: Allows editing Herobrine's configuration
+    default: op

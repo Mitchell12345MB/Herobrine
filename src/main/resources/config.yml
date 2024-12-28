@@ -1,0 +1,83 @@
+# Herobrine Plugin Configuration
+
+# Appearance settings
+appearance:
+  # Time in seconds between possible appearances
+  frequency: 300
+  # Chance of appearing when timer triggers (0.0 - 1.0)
+  chance: 0.1
+
+# Effect settings
+effects:
+  # Enable/disable ambient sounds
+  ambient_sounds: true
+  # Enable/disable structure manipulation
+  structure_manipulation: true
+  # Enable/disable stalking behavior
+  stalking_enabled: true
+  # Maximum distance for stalking (in blocks)
+  max_stalk_distance: 50
+
+# Structure settings
+structures:
+  # Enable/disable individual structure types
+  enabled_types:
+    sand_pyramids: true
+    redstone_caves: true
+    stripped_trees: true
+    mysterious_tunnels: true
+    glowstone_e: true
+    wooden_crosses: true
+    tripwire_traps: true
+    creepy_signs: true
+  
+  # Chance weights for each structure type (higher number = more common)
+  weights:
+    sand_pyramids: 15
+    redstone_caves: 15
+    stripped_trees: 15
+    mysterious_tunnels: 15
+    glowstone_e: 10
+    wooden_crosses: 10
+    tripwire_traps: 10
+    creepy_signs: 10
+  
+  # Structure-specific settings
+  sand_pyramids:
+    size: 5  # Base size of the pyramid
+  
+  redstone_caves:
+    min_length: 15  # Minimum tunnel length
+    max_length: 25  # Maximum tunnel length
+    torch_interval: 3  # Blocks between torches
+  
+  mysterious_tunnels:
+    min_length: 20  # Minimum tunnel length
+    max_length: 40  # Maximum tunnel length
+    depth: 10  # Blocks below surface
+  
+  stripped_trees:
+    radius: 5  # Radius to search for trees
+    max_height: 10  # Maximum height to strip leaves
+  
+  glowstone_e:
+    depth: 5  # Blocks below surface
+  
+  wooden_crosses:
+    height: 3  # Height of the cross
+  
+  tripwire_traps:
+    tnt_count: 4  # Number of TNT blocks
+
+# Advanced settings
+advanced:
+  # Debug mode (prints additional information to console)
+  debug: false
+  # Maximum number of simultaneous appearances
+  max_appearances: 1
+  # Time in seconds before Herobrine disappears
+  appearance_duration: 10
+  # Minimum distance from player for appearances (in blocks)
+  min_appearance_distance: 15
+  # Maximum distance from player for appearances (in blocks)
+  max_appearance_distance: 25 
