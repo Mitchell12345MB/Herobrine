@@ -15,6 +15,15 @@ public class ConfigManager {
     private boolean structureManipulationEnabled;
     private boolean stalkingEnabled;
     private int maxStalkDistance;
+    private boolean fogEnabled;
+    private double fogDensity;
+    private int fogDuration;
+    private boolean footstepsEnabled;
+    private int maxFootsteps;
+    private boolean torchManipulationEnabled;
+    private int torchManipulationRadius;
+    private double torchConversionChance;
+    private double torchRemovalChance;
 
     public ConfigManager(HerobrinePlugin plugin) {
         this.plugin = plugin;
@@ -32,6 +41,15 @@ public class ConfigManager {
         structureManipulationEnabled = config.getBoolean("effects.structure_manipulation", true);
         stalkingEnabled = config.getBoolean("effects.stalking_enabled", true);
         maxStalkDistance = config.getInt("effects.max_stalk_distance", 50);
+        fogEnabled = config.getBoolean("effects.fog_enabled", true);
+        fogDensity = config.getDouble("effects.fog_density", 0.8);
+        fogDuration = config.getInt("effects.fog_duration", 200);
+        footstepsEnabled = config.getBoolean("effects.footsteps_enabled", true);
+        maxFootsteps = config.getInt("effects.max_footsteps", 10);
+        torchManipulationEnabled = config.getBoolean("effects.torch_manipulation", true);
+        torchManipulationRadius = config.getInt("effects.torch_manipulation_radius", 10);
+        torchConversionChance = config.getDouble("effects.torch_conversion_chance", 0.7);
+        torchRemovalChance = config.getDouble("effects.torch_removal_chance", 0.3);
         
         saveConfig();
     }
@@ -44,6 +62,15 @@ public class ConfigManager {
         config.set("effects.structure_manipulation", structureManipulationEnabled);
         config.set("effects.stalking_enabled", stalkingEnabled);
         config.set("effects.max_stalk_distance", maxStalkDistance);
+        config.set("effects.fog_enabled", fogEnabled);
+        config.set("effects.fog_density", fogDensity);
+        config.set("effects.fog_duration", fogDuration);
+        config.set("effects.footsteps_enabled", footstepsEnabled);
+        config.set("effects.max_footsteps", maxFootsteps);
+        config.set("effects.torch_manipulation", torchManipulationEnabled);
+        config.set("effects.torch_manipulation_radius", torchManipulationRadius);
+        config.set("effects.torch_conversion_chance", torchConversionChance);
+        config.set("effects.torch_removal_chance", torchRemovalChance);
         plugin.saveConfig();
     }
 
@@ -204,5 +231,86 @@ public class ConfigManager {
         }
 
         return chances;
+    }
+
+    public boolean isFogEnabled() {
+        return fogEnabled;
+    }
+
+    public void setFogEnabled(boolean fogEnabled) {
+        this.fogEnabled = fogEnabled;
+        saveConfig();
+    }
+
+    public double getFogDensity() {
+        return fogDensity;
+    }
+
+    public void setFogDensity(double fogDensity) {
+        this.fogDensity = fogDensity;
+        saveConfig();
+    }
+
+    public int getFogDuration() {
+        return fogDuration;
+    }
+
+    public void setFogDuration(int fogDuration) {
+        this.fogDuration = fogDuration;
+        saveConfig();
+    }
+
+    public boolean isFootstepsEnabled() {
+        return footstepsEnabled;
+    }
+
+    public void setFootstepsEnabled(boolean enabled) {
+        this.footstepsEnabled = enabled;
+        saveConfig();
+    }
+
+    public int getMaxFootsteps() {
+        return maxFootsteps;
+    }
+
+    public void setMaxFootsteps(int steps) {
+        this.maxFootsteps = Math.max(1, Math.min(20, steps));
+        saveConfig();
+    }
+
+    public boolean isTorchManipulationEnabled() {
+        return torchManipulationEnabled;
+    }
+
+    public void setTorchManipulationEnabled(boolean enabled) {
+        this.torchManipulationEnabled = enabled;
+        saveConfig();
+    }
+
+    public int getTorchManipulationRadius() {
+        return torchManipulationRadius;
+    }
+
+    public void setTorchManipulationRadius(int radius) {
+        this.torchManipulationRadius = Math.max(5, Math.min(20, radius));
+        saveConfig();
+    }
+
+    public double getTorchConversionChance() {
+        return torchConversionChance;
+    }
+
+    public void setTorchConversionChance(double chance) {
+        this.torchConversionChance = Math.min(1.0, Math.max(0.0, chance));
+        saveConfig();
+    }
+
+    public double getTorchRemovalChance() {
+        return torchRemovalChance;
+    }
+
+    public void setTorchRemovalChance(double chance) {
+        this.torchRemovalChance = Math.min(1.0, Math.max(0.0, chance));
+        saveConfig();
     }
 } 

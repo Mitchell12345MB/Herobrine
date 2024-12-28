@@ -12,6 +12,7 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
+import org.bukkit.block.Chest;
 import org.bukkit.block.Sign;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.block.data.type.TripwireHook;
@@ -20,6 +21,7 @@ import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerBedEnterEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.scheduler.BukkitRunnable;
@@ -182,6 +184,19 @@ public class AppearanceManager implements Listener {
                             npc.teleport(stalkLoc, PlayerTeleportEvent.TeleportCause.PLUGIN);
                             // Play stalk effects
                             plugin.getEffectManager().playStalkEffects(player, stalkLoc);
+                            // Add footsteps
+                            plugin.getEffectManager().playFootstepEffects(player);
+                            // Manipulate nearby torches
+                            if (random.nextDouble() < 0.3) { // 30% chance to mess with torches
+                                plugin.getEffectManager().manipulateTorches(stalkLoc, 10);
+                            }
+                            // Chance to leave items in nearby chests
+                            if (random.nextDouble() < 0.15) { // 15% chance to leave items
+                                Location chestLoc = findNearbyChest(stalkLoc);
+                                if (chestLoc != null) {
+                                    plugin.getEffectManager().leaveChestDonation(chestLoc);
+                                }
+                            }
                         }
                     } else { // 30% chance to vanish and reappear elsewhere
                         Location disappearLoc = npc.getEntity().getLocation();
@@ -316,6 +331,99 @@ public class AppearanceManager implements Listener {
                 }
             }
         }
+    }
+
+    @EventHandler
+    public void onPlayerBedEnter(PlayerBedEnterEvent event) {
+        Player player = event.getPlayer();
+        
+        // Check if Herobrine is nearby
+        if (isHerobrineNearby(player)) {
+            event.setCancelled(true);
+            plugin.getEffectManager().playSleepPreventionEffects(player);
+            return;
+        }
+        
+        // Even if Herobrine isn't actively stalking, there's a small chance he'll appear
+        if (Math.random() < 0.2) { // 20% chance
+            event.setCancelled(true);
+            plugin.getEffectManager().playSleepPreventionEffects(player);
+            createWindowAppearance(player, event.getBed().getLocation());
+        }
+    }
+
+    private void createWindowAppearance(Player player, Location targetLocation) {
+        // Find a suitable window location near the target
+        Location windowLoc = findWindowLocation(targetLocation);
+        if (windowLoc == null) return;
+
+        // Create Herobrine at the window
+        NPC npc = registry.createNPC(EntityType.PLAYER, "Herobrine");
+        npc.setProtected(true);
+        
+        // Set skin
+        SkinTrait skinTrait = npc.getOrAddTrait(SkinTrait.class);
+        skinTrait.setSkinPersistent("Herobrine", SIGNATURE, TEXTURE);
+        
+        // Make NPC look at player
+        npc.spawn(windowLoc);
+        Vector direction = player.getLocation().toVector().subtract(windowLoc.toVector()).normalize();
+        windowLoc.setDirection(direction);
+        npc.teleport(windowLoc, PlayerTeleportEvent.TeleportCause.PLUGIN);
+        
+        // Set player filter
+        PlayerFilter filterTrait = npc.getOrAddTrait(PlayerFilter.class);
+        filterTrait.setAllowlist();
+        filterTrait.addPlayer(player.getUniqueId());
+
+        // Store the NPC
+        activeAppearances.put(player.getUniqueId(), npc);
+        
+        // Schedule removal after a short time
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                if (npc.isSpawned()) {
+                    Location disappearLoc = npc.getEntity().getLocation();
+                    plugin.getEffectManager().playAppearanceEffects(player, disappearLoc);
+                    removeAppearance(player);
+                }
+            }
+        }.runTaskLater(plugin, 100L); // 5 seconds
+        
+        // Play effects
+        plugin.getEffectManager().playAppearanceEffects(player, windowLoc);
+    }
+
+    private Location findWindowLocation(Location targetLocation) {
+        // Search for glass panes or glass blocks near the target location
+        int radius = 5;
+        
+        for (int x = -radius; x <= radius; x++) {
+            for (int y = 0; y <= 2; y++) { // Search up to 2 blocks above ground level
+                for (int z = -radius; z <= radius; z++) {
+                    Location loc = targetLocation.clone().add(x, y, z);
+                    Block block = loc.getBlock();
+                    
+                    // Check if block is a window (glass pane or glass block)
+                    if (block.getType().name().contains("GLASS")) {
+                        // Find a position just outside the window
+                        BlockFace[] faces = {BlockFace.NORTH, BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST};
+                        for (BlockFace face : faces) {
+                            Block relative = block.getRelative(face);
+                            if (relative.getType() == Material.AIR) {
+                                Location windowLoc = relative.getLocation().add(0.5, 0, 0.5);
+                                // Make sure there's room for Herobrine to stand
+                                if (relative.getRelative(BlockFace.UP).getType() == Material.AIR) {
+                                    return windowLoc;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return null;
     }
 
     private boolean isHerobrineNearby(Player player) {
@@ -789,5 +897,25 @@ public class AppearanceManager implements Listener {
         
         plugin.getAggressionManager().registerStructure(location);
         plugin.getEffectManager().playStructureManipulationEffects(location);
+    }
+
+    private Location findNearbyChest(Location center) {
+        int radius = 10;
+        for (int x = -radius; x <= radius; x++) {
+            for (int y = -2; y <= 2; y++) {
+                for (int z = -radius; z <= radius; z++) {
+                    Location loc = center.clone().add(x, y, z);
+                    Block block = loc.getBlock();
+                    if (block.getType() == Material.CHEST) {
+                        // Make sure the chest isn't full
+                        Chest chest = (Chest) block.getState();
+                        if (chest.getInventory().firstEmpty() != -1) {
+                            return loc;
+                        }
+                    }
+                }
+            }
+        }
+        return null;
     }
 } 

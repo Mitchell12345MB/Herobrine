@@ -157,6 +157,165 @@ public class HerobrineCommand implements CommandExecutor {
                 }
                 return true;
 
+            case "fog":
+                if (args.length < 3) {
+                    sendFogConfigUsage(sender);
+                    return true;
+                }
+                switch (args[2].toLowerCase()) {
+                    case "enable":
+                        plugin.getConfigManager().setFogEnabled(true);
+                        sender.sendMessage(ChatColor.GREEN + "Fog effects enabled");
+                        return true;
+                    case "disable":
+                        plugin.getConfigManager().setFogEnabled(false);
+                        sender.sendMessage(ChatColor.GREEN + "Fog effects disabled");
+                        return true;
+                    case "density":
+                        if (args.length < 4) {
+                            sender.sendMessage(ChatColor.RED + "Please specify a density value (0.0 - 1.0)");
+                            return true;
+                        }
+                        try {
+                            double density = Double.parseDouble(args[3]);
+                            if (density < 0 || density > 1) {
+                                sender.sendMessage(ChatColor.RED + "Density must be between 0 and 1!");
+                                return true;
+                            }
+                            plugin.getConfigManager().setFogDensity(density);
+                            sender.sendMessage(ChatColor.GREEN + "Set fog density to " + density);
+                        } catch (NumberFormatException e) {
+                            sender.sendMessage(ChatColor.RED + "Invalid density value!");
+                        }
+                        return true;
+                    case "duration":
+                        if (args.length < 4) {
+                            sender.sendMessage(ChatColor.RED + "Please specify a duration in ticks");
+                            return true;
+                        }
+                        try {
+                            int duration = Integer.parseInt(args[3]);
+                            if (duration < 20) {
+                                sender.sendMessage(ChatColor.RED + "Duration must be at least 20 ticks (1 second)!");
+                                return true;
+                            }
+                            plugin.getConfigManager().setFogDuration(duration);
+                            sender.sendMessage(ChatColor.GREEN + "Set fog duration to " + duration + " ticks");
+                        } catch (NumberFormatException e) {
+                            sender.sendMessage(ChatColor.RED + "Invalid duration value!");
+                        }
+                        return true;
+                    default:
+                        sendFogConfigUsage(sender);
+                        return true;
+                }
+
+            case "footsteps":
+                if (args.length < 3) {
+                    sendFootstepsConfigUsage(sender);
+                    return true;
+                }
+                switch (args[2].toLowerCase()) {
+                    case "enable":
+                        plugin.getConfigManager().setFootstepsEnabled(true);
+                        sender.sendMessage(ChatColor.GREEN + "Footstep effects enabled");
+                        return true;
+                    case "disable":
+                        plugin.getConfigManager().setFootstepsEnabled(false);
+                        sender.sendMessage(ChatColor.GREEN + "Footstep effects disabled");
+                        return true;
+                    case "max":
+                        if (args.length < 4) {
+                            sender.sendMessage(ChatColor.RED + "Please specify the maximum number of footsteps");
+                            return true;
+                        }
+                        try {
+                            int max = Integer.parseInt(args[3]);
+                            if (max < 1) {
+                                sender.sendMessage(ChatColor.RED + "Maximum footsteps must be at least 1!");
+                                return true;
+                            }
+                            plugin.getConfigManager().setMaxFootsteps(max);
+                            sender.sendMessage(ChatColor.GREEN + "Set maximum footsteps to " + max);
+                        } catch (NumberFormatException e) {
+                            sender.sendMessage(ChatColor.RED + "Invalid number!");
+                        }
+                        return true;
+                    default:
+                        sendFootstepsConfigUsage(sender);
+                        return true;
+                }
+
+            case "torches":
+                if (args.length < 3) {
+                    sendTorchConfigUsage(sender);
+                    return true;
+                }
+                switch (args[2].toLowerCase()) {
+                    case "enable":
+                        plugin.getConfigManager().setTorchManipulationEnabled(true);
+                        sender.sendMessage(ChatColor.GREEN + "Torch manipulation enabled");
+                        return true;
+                    case "disable":
+                        plugin.getConfigManager().setTorchManipulationEnabled(false);
+                        sender.sendMessage(ChatColor.GREEN + "Torch manipulation disabled");
+                        return true;
+                    case "radius":
+                        if (args.length < 4) {
+                            sender.sendMessage(ChatColor.RED + "Please specify the radius in blocks");
+                            return true;
+                        }
+                        try {
+                            int radius = Integer.parseInt(args[3]);
+                            if (radius < 5 || radius > 20) {
+                                sender.sendMessage(ChatColor.RED + "Radius must be between 5 and 20 blocks!");
+                                return true;
+                            }
+                            plugin.getConfigManager().setTorchManipulationRadius(radius);
+                            sender.sendMessage(ChatColor.GREEN + "Set torch manipulation radius to " + radius);
+                        } catch (NumberFormatException e) {
+                            sender.sendMessage(ChatColor.RED + "Invalid radius value!");
+                        }
+                        return true;
+                    case "conversion":
+                        if (args.length < 4) {
+                            sender.sendMessage(ChatColor.RED + "Please specify the conversion chance (0.0 - 1.0)");
+                            return true;
+                        }
+                        try {
+                            double chance = Double.parseDouble(args[3]);
+                            if (chance < 0 || chance > 1) {
+                                sender.sendMessage(ChatColor.RED + "Chance must be between 0 and 1!");
+                                return true;
+                            }
+                            plugin.getConfigManager().setTorchConversionChance(chance);
+                            sender.sendMessage(ChatColor.GREEN + "Set torch conversion chance to " + chance);
+                        } catch (NumberFormatException e) {
+                            sender.sendMessage(ChatColor.RED + "Invalid chance value!");
+                        }
+                        return true;
+                    case "removal":
+                        if (args.length < 4) {
+                            sender.sendMessage(ChatColor.RED + "Please specify the removal chance (0.0 - 1.0)");
+                            return true;
+                        }
+                        try {
+                            double chance = Double.parseDouble(args[3]);
+                            if (chance < 0 || chance > 1) {
+                                sender.sendMessage(ChatColor.RED + "Chance must be between 0 and 1!");
+                                return true;
+                            }
+                            plugin.getConfigManager().setTorchRemovalChance(chance);
+                            sender.sendMessage(ChatColor.GREEN + "Set torch removal chance to " + chance);
+                        } catch (NumberFormatException e) {
+                            sender.sendMessage(ChatColor.RED + "Invalid chance value!");
+                        }
+                        return true;
+                    default:
+                        sendTorchConfigUsage(sender);
+                        return true;
+                }
+
             default:
                 sendConfigUsage(sender);
                 return true;
@@ -175,5 +334,32 @@ public class HerobrineCommand implements CommandExecutor {
         sender.sendMessage(ChatColor.GOLD + "Herobrine Configuration Commands:");
         sender.sendMessage(ChatColor.YELLOW + "/herobrine config frequency <seconds> " + ChatColor.WHITE + "- Set how often Herobrine might appear");
         sender.sendMessage(ChatColor.YELLOW + "/herobrine config chance <0-1> " + ChatColor.WHITE + "- Set the chance of Herobrine appearing");
+        sender.sendMessage(ChatColor.YELLOW + "/herobrine config fog " + ChatColor.WHITE + "- Configure fog effects");
+        sender.sendMessage(ChatColor.YELLOW + "/herobrine config footsteps " + ChatColor.WHITE + "- Configure footstep effects");
+        sender.sendMessage(ChatColor.YELLOW + "/herobrine config torches " + ChatColor.WHITE + "- Configure torch manipulation");
+    }
+
+    private void sendFogConfigUsage(CommandSender sender) {
+        sender.sendMessage(ChatColor.GOLD + "Fog Configuration Commands:");
+        sender.sendMessage(ChatColor.YELLOW + "/herobrine config fog enable " + ChatColor.WHITE + "- Enable fog effects");
+        sender.sendMessage(ChatColor.YELLOW + "/herobrine config fog disable " + ChatColor.WHITE + "- Disable fog effects");
+        sender.sendMessage(ChatColor.YELLOW + "/herobrine config fog density <0-1> " + ChatColor.WHITE + "- Set fog density");
+        sender.sendMessage(ChatColor.YELLOW + "/herobrine config fog duration <ticks> " + ChatColor.WHITE + "- Set fog duration (20 ticks = 1 second)");
+    }
+
+    private void sendFootstepsConfigUsage(CommandSender sender) {
+        sender.sendMessage(ChatColor.GOLD + "Footsteps Configuration Commands:");
+        sender.sendMessage(ChatColor.YELLOW + "/herobrine config footsteps enable " + ChatColor.WHITE + "- Enable footstep effects");
+        sender.sendMessage(ChatColor.YELLOW + "/herobrine config footsteps disable " + ChatColor.WHITE + "- Disable footstep effects");
+        sender.sendMessage(ChatColor.YELLOW + "/herobrine config footsteps max <number> " + ChatColor.WHITE + "- Set maximum number of footsteps");
+    }
+
+    private void sendTorchConfigUsage(CommandSender sender) {
+        sender.sendMessage(ChatColor.GOLD + "Torch Manipulation Configuration Commands:");
+        sender.sendMessage(ChatColor.YELLOW + "/herobrine config torches enable " + ChatColor.WHITE + "- Enable torch manipulation");
+        sender.sendMessage(ChatColor.YELLOW + "/herobrine config torches disable " + ChatColor.WHITE + "- Disable torch manipulation");
+        sender.sendMessage(ChatColor.YELLOW + "/herobrine config torches radius <blocks> " + ChatColor.WHITE + "- Set manipulation radius (5-20)");
+        sender.sendMessage(ChatColor.YELLOW + "/herobrine config torches conversion <0-1> " + ChatColor.WHITE + "- Set torch conversion chance");
+        sender.sendMessage(ChatColor.YELLOW + "/herobrine config torches removal <0-1> " + ChatColor.WHITE + "- Set torch removal chance");
     }
 } 

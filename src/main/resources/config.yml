@@ -17,6 +17,24 @@ effects:
   stalking_enabled: true
   # Maximum distance for stalking (in blocks)
   max_stalk_distance: 50
+  # Enable/disable fog effects
+  fog_enabled: true
+  # Fog density (0.0 - 1.0)
+  fog_density: 0.8
+  # Duration of fog effects in ticks (20 ticks = 1 second)
+  fog_duration: 200
+  # Enable/disable footstep effects
+  footsteps_enabled: true
+  # Maximum number of footsteps to create
+  max_footsteps: 10
+  # Enable/disable torch manipulation
+  torch_manipulation: true
+  # Radius for torch manipulation (in blocks)
+  torch_manipulation_radius: 10
+  # Chance to convert torches to redstone torches (0.0 - 1.0)
+  torch_conversion_chance: 0.7
+  # Chance to remove torches completely (0.0 - 1.0)
+  torch_removal_chance: 0.3
 
 # Structure settings
 structures:
