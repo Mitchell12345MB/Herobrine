@@ -7,6 +7,8 @@ import net.citizensnpcs.api.npc.NPCRegistry;
 import net.citizensnpcs.api.trait.trait.PlayerFilter;
 import net.citizensnpcs.trait.LookClose;
 import net.citizensnpcs.trait.SkinTrait;
+import net.citizensnpcs.api.ai.Navigator;
+import net.citizensnpcs.api.ai.NavigatorParameters;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -120,6 +122,12 @@ public class AppearanceManager implements Listener {
         // Spawn NPC at location
         npc.spawn(location);
         
+        // Configure navigation
+        Navigator navigator = npc.getNavigator();
+        NavigatorParameters params = navigator.getLocalParameters();
+        params.speedModifier(1.4f); // Slightly faster than player
+        params.distanceMargin(1.5); // How close to get to target
+        
         // Make NPC look at player
         LookClose lookTrait = npc.getOrAddTrait(LookClose.class);
         lookTrait.setRange(50);
@@ -143,6 +151,9 @@ public class AppearanceManager implements Listener {
     private void startBehaviorCheckTask(Player player, NPC npc) {
         new BukkitRunnable() {
             int ticksExisted = 0;
+            boolean isRunningAway = false;
+            Location runAwayTarget = null;
+            Navigator navigator = npc.getNavigator();
             
             @Override
             public void run() {
@@ -158,8 +169,9 @@ public class AppearanceManager implements Listener {
                 
                 // Check if player is too close (within 10 blocks)
                 if (player.getLocation().distance(npc.getEntity().getLocation()) < 10) {
-                    // 80% chance to vanish when player gets too close
-                    if (Math.random() < 0.8) {
+                    // If player is sprinting towards Herobrine, increase chance to run
+                    double vanishChance = player.isSprinting() ? 0.9 : 0.8;
+                    if (Math.random() < vanishChance) {
                         Location disappearLoc = npc.getEntity().getLocation();
                         plugin.getEffectManager().playAppearanceEffects(player, disappearLoc);
                         removeAppearance(player);
@@ -172,16 +184,22 @@ public class AppearanceManager implements Listener {
                 if (ticksExisted % 40 == 0) {
                     double rand = Math.random();
                     Location playerLoc = player.getLocation();
+                    Location npcLoc = npc.getEntity().getLocation();
+                    
+                    // Increase chance to run if player is looking at Herobrine
+                    if (isPlayerLookingAt(player, npcLoc)) {
+                        rand += 0.2; // Bias towards running away when looked at
+                    }
                     
                     if (rand < 0.3) { // 30% chance to create a trap or structure
                         Location trapLoc = findSuitableLocation(playerLoc, 10, 20);
                         if (trapLoc != null) {
                             createRandomStructure(trapLoc);
                         }
-                    } else if (rand < 0.7) { // 40% chance to stalk
+                    } else if (rand < 0.6 && !isRunningAway) { // 30% chance to stalk if not already running
                         Location stalkLoc = findStalkLocation(player);
                         if (stalkLoc != null) {
-                            npc.teleport(stalkLoc, PlayerTeleportEvent.TeleportCause.PLUGIN);
+                            navigator.setTarget(stalkLoc);
                             // Play stalk effects
                             plugin.getEffectManager().playStalkEffects(player, stalkLoc);
                             // Add footsteps
@@ -198,20 +216,40 @@ public class AppearanceManager implements Listener {
                                 }
                             }
                         }
-                    } else { // 30% chance to vanish and reappear elsewhere
-                        Location disappearLoc = npc.getEntity().getLocation();
-                        plugin.getEffectManager().playAppearanceEffects(player, disappearLoc);
-                        
-                        // Find a new location to appear
-                        Location newLoc = findAppearanceLocation(player);
-                        if (newLoc != null) {
-                            npc.teleport(newLoc, PlayerTeleportEvent.TeleportCause.PLUGIN);
-                            plugin.getEffectManager().playAppearanceEffects(player, newLoc);
+                    } else { // 40% chance to run away (increased from 20%)
+                        if (!isRunningAway) {
+                            runAwayTarget = findRunAwayLocation(player);
+                            if (runAwayTarget != null) {
+                                isRunningAway = true;
+                                navigator.setTarget(runAwayTarget);
+                                // Create a structure at the starting point
+                                createRandomStructure(npc.getEntity().getLocation());
+                            }
+                        }
+                    }
+                }
+
+                // Handle running away behavior every tick
+                if (isRunningAway && runAwayTarget != null) {
+                    Location npcLoc = npc.getEntity().getLocation();
+                    if (npcLoc.distance(runAwayTarget) < 2) {
+                        // Reached target, disappear
+                        plugin.getEffectManager().playAppearanceEffects(player, npcLoc);
+                        removeAppearance(player);
+                        cancel();
+                        return;
+                    }
+
+                    // Update path if player gets too close while running
+                    if (player.getLocation().distance(npcLoc) < 15) {
+                        runAwayTarget = findRunAwayLocation(player);
+                        if (runAwayTarget != null) {
+                            navigator.setTarget(runAwayTarget);
                         }
                     }
                 }
             }
-        }.runTaskTimer(plugin, 20L, 1L);
+        }.runTaskTimer(plugin, 1L, 1L);
     }
 
     private Location findSuitableLocation(Location center, int minDistance, int maxDistance) {
@@ -316,16 +354,19 @@ public class AppearanceManager implements Listener {
                 Location playerLoc = player.getLocation();
                 Location npcLoc = npc.getEntity().getLocation();
                 
-                // Make Herobrine always face the player
-                Vector direction = playerLoc.toVector().subtract(npcLoc.toVector()).normalize();
-                npcLoc.setDirection(direction);
-                npc.teleport(npcLoc, PlayerTeleportEvent.TeleportCause.PLUGIN);
+                // React to player sprinting
+                if (player.isSprinting() && playerLoc.distance(npcLoc) < 15) {
+                    Navigator navigator = npc.getNavigator();
+                    Location runTo = findRunAwayLocation(player);
+                    if (runTo != null) {
+                        navigator.setTarget(runTo);
+                    }
+                }
                 
                 // If player is looking directly at Herobrine and is within 20 blocks, higher chance to vanish
-                if (isPlayerLookingAt(player, npc.getEntity().getLocation()) && 
+                if (isPlayerLookingAt(player, npcLoc) && 
                     playerLoc.distance(npcLoc) < 20 && 
-                    Math.random() < 0.4) { // 40% chance to vanish when looked at
-                    
+                    Math.random() < 0.4) {
                     plugin.getEffectManager().playAppearanceEffects(player, npcLoc);
                     removeAppearance(player);
                 }
@@ -914,6 +955,33 @@ public class AppearanceManager implements Listener {
                         }
                     }
                 }
+            }
+        }
+        return null;
+    }
+
+    private Location findRunAwayLocation(Player player) {
+        Location playerLoc = player.getLocation();
+        int attempts = 0;
+        int maxAttempts = 10;
+
+        while (attempts++ < maxAttempts) {
+            // Get a location far away from the player
+            double angle = random.nextDouble() * 2 * Math.PI;
+            double distance = 40 + random.nextDouble() * 20; // Between 40-60 blocks away
+            
+            Location loc = playerLoc.clone().add(
+                Math.cos(angle) * distance,
+                0,
+                Math.sin(angle) * distance
+            );
+
+            // Find the highest block at this location
+            loc.setY(loc.getWorld().getHighestBlockYAt(loc));
+
+            if (loc.getBlock().getType().isSolid()) {
+                loc.add(0, 1, 0);
+                return loc;
             }
         }
         return null;

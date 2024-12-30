@@ -1,11 +1,11 @@
 # Herobrine Plugin Configuration
 
-# Appearance settings
+enabled: true
 appearance:
   # Time in seconds between possible appearances
   frequency: 300
   # Chance of appearing when timer triggers (0.0 - 1.0)
-  chance: 0.1
+  chance: 0.3
 
 # Effect settings
 effects:
@@ -20,7 +20,7 @@ effects:
   # Enable/disable fog effects (uses blindness and darkness)
   fog_enabled: true
   # Fog intensity (0.0 - 1.0, affects blindness and darkness levels)
-  fog_density: 0.3
+  fog_density: 0.1
   # Duration of fog effects in ticks (20 ticks = 1 second)
   fog_duration: 200
   # Enable/disable footstep effects

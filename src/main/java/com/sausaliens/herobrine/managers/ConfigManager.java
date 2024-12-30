@@ -7,7 +7,7 @@ import java.util.Map;
 
 public class ConfigManager {
     private final HerobrinePlugin plugin;
-    private final FileConfiguration config;
+    private FileConfiguration config;
     private boolean enabled;
     private int appearanceFrequency;
     private double appearanceChance;
@@ -38,36 +38,100 @@ public class ConfigManager {
     }
 
     public void loadConfig() {
-        plugin.saveDefaultConfig();
+        // Save the default config with comments if it doesn't exist
+        if (!plugin.getDataFolder().exists()) {
+            plugin.getDataFolder().mkdirs();
+        }
         
+        java.io.File configFile = new java.io.File(plugin.getDataFolder(), "config.yml");
+        if (!configFile.exists()) {
+            plugin.saveResource("config.yml", false);
+        }
+        
+        // Reload the config to get the latest values
+        plugin.reloadConfig();
+        this.config = plugin.getConfig();
+        
+        // Load all values with validation
         enabled = config.getBoolean("enabled", true);
-        appearanceFrequency = config.getInt("appearance.frequency", 300);
-        appearanceChance = config.getDouble("appearance.chance", 0.3);
+        appearanceFrequency = Math.max(1, config.getInt("appearance.frequency", 300));
+        appearanceChance = Math.min(1.0, Math.max(0.0, config.getDouble("appearance.chance", 0.3)));
         ambientSoundsEnabled = config.getBoolean("effects.ambient_sounds", true);
         structureManipulationEnabled = config.getBoolean("effects.structure_manipulation", true);
         stalkingEnabled = config.getBoolean("effects.stalking_enabled", true);
-        maxStalkDistance = config.getInt("effects.max_stalk_distance", 50);
+        maxStalkDistance = Math.max(10, Math.min(100, config.getInt("effects.max_stalk_distance", 50)));
         fogEnabled = config.getBoolean("effects.fog_enabled", true);
-        fogDensity = config.getDouble("effects.fog_density", 0.8);
-        fogDuration = config.getInt("effects.fog_duration", 200);
+        fogDensity = Math.min(1.0, Math.max(0.0, config.getDouble("effects.fog_density", 0.8)));
+        fogDuration = Math.max(20, config.getInt("effects.fog_duration", 200));
         footstepsEnabled = config.getBoolean("effects.footsteps_enabled", true);
-        maxFootsteps = config.getInt("effects.max_footsteps", 10);
+        maxFootsteps = Math.max(1, Math.min(20, config.getInt("effects.max_footsteps", 10)));
         torchManipulationEnabled = config.getBoolean("effects.torch_manipulation", true);
-        torchManipulationRadius = config.getInt("effects.torch_manipulation_radius", 10);
-        torchConversionChance = config.getDouble("effects.torch_conversion_chance", 0.7);
-        torchRemovalChance = config.getDouble("effects.torch_removal_chance", 0.3);
+        torchManipulationRadius = Math.max(5, Math.min(20, config.getInt("effects.torch_manipulation_radius", 10)));
+        torchConversionChance = Math.min(1.0, Math.max(0.0, config.getDouble("effects.torch_conversion_chance", 0.7)));
+        torchRemovalChance = Math.min(1.0, Math.max(0.0, config.getDouble("effects.torch_removal_chance", 0.3)));
         
-        // Load advanced settings
+        // Load advanced settings with validation
         debugMode = config.getBoolean("advanced.debug", false);
-        maxAppearances = config.getInt("advanced.max_appearances", 1);
-        appearanceDuration = config.getInt("advanced.appearance_duration", 10);
-        minAppearanceDistance = config.getInt("advanced.min_appearance_distance", 15);
-        maxAppearanceDistance = config.getInt("advanced.max_appearance_distance", 25);
+        maxAppearances = Math.max(1, config.getInt("advanced.max_appearances", 1));
+        appearanceDuration = Math.max(1, config.getInt("advanced.appearance_duration", 10));
+        minAppearanceDistance = Math.max(5, config.getInt("advanced.min_appearance_distance", 15));
+        maxAppearanceDistance = Math.max(minAppearanceDistance, config.getInt("advanced.max_appearance_distance", 25));
+
+        // Validate structure settings
+        String[] structureTypes = {
+            "sand_pyramids", "redstone_caves", "stripped_trees", 
+            "mysterious_tunnels", "glowstone_e", "wooden_crosses", 
+            "tripwire_traps", "creepy_signs"
+        };
+
+        // Validate structure weights
+        for (String type : structureTypes) {
+            int weight = config.getInt("structures.weights." + type, 10);
+            config.set("structures.weights." + type, Math.max(1, weight)); // Ensure positive weights
+        }
+
+        // Validate structure-specific settings
+        config.set("structures.sand_pyramids.size", 
+            Math.max(3, Math.min(10, config.getInt("structures.sand_pyramids.size", 5))));
+
+        config.set("structures.redstone_caves.min_length",
+            Math.max(10, config.getInt("structures.redstone_caves.min_length", 15)));
+        config.set("structures.redstone_caves.max_length",
+            Math.max(config.getInt("structures.redstone_caves.min_length", 15),
+                    config.getInt("structures.redstone_caves.max_length", 25)));
+        config.set("structures.redstone_caves.torch_interval",
+            Math.max(1, config.getInt("structures.redstone_caves.torch_interval", 3)));
+
+        config.set("structures.mysterious_tunnels.min_length",
+            Math.max(10, config.getInt("structures.mysterious_tunnels.min_length", 20)));
+        config.set("structures.mysterious_tunnels.max_length",
+            Math.max(config.getInt("structures.mysterious_tunnels.min_length", 20),
+                    config.getInt("structures.mysterious_tunnels.max_length", 40)));
+        config.set("structures.mysterious_tunnels.depth",
+            Math.max(5, config.getInt("structures.mysterious_tunnels.depth", 10)));
+
+        config.set("structures.stripped_trees.radius",
+            Math.max(3, Math.min(10, config.getInt("structures.stripped_trees.radius", 5))));
+        config.set("structures.stripped_trees.max_height",
+            Math.max(5, Math.min(20, config.getInt("structures.stripped_trees.max_height", 10))));
+
+        config.set("structures.glowstone_e.depth",
+            Math.max(3, Math.min(10, config.getInt("structures.glowstone_e.depth", 5))));
+
+        config.set("structures.wooden_crosses.height",
+            Math.max(2, Math.min(5, config.getInt("structures.wooden_crosses.height", 3))));
+
+        config.set("structures.tripwire_traps.tnt_count",
+            Math.max(1, Math.min(8, config.getInt("structures.tripwire_traps.tnt_count", 4))));
         
-        saveConfig();
+        // Only save if values were changed from defaults
+        if (config.getDefaults() != null && !config.getValues(true).equals(config.getDefaults().getValues(true))) {
+            saveConfig();
+        }
     }
 
     public void saveConfig() {
+        // Update values without changing the structure or comments
         config.set("enabled", enabled);
         config.set("appearance.frequency", appearanceFrequency);
         config.set("appearance.chance", appearanceChance);
@@ -85,6 +149,45 @@ public class ConfigManager {
         config.set("effects.torch_conversion_chance", torchConversionChance);
         config.set("effects.torch_removal_chance", torchRemovalChance);
         
+        // Save structure settings
+        String[] structureTypes = {
+            "sand_pyramids", "redstone_caves", "stripped_trees", 
+            "mysterious_tunnels", "glowstone_e", "wooden_crosses", 
+            "tripwire_traps", "creepy_signs"
+        };
+        
+        // Save enabled types
+        for (String type : structureTypes) {
+            config.set("structures.enabled_types." + type, true);
+        }
+        
+        // Save weights
+        for (String type : structureTypes) {
+            int weight = type.equals("glowstone_e") || type.equals("wooden_crosses") || 
+                        type.equals("tripwire_traps") || type.equals("creepy_signs") ? 10 : 15;
+            config.set("structures.weights." + type, weight);
+        }
+        
+        // Save structure-specific settings
+        config.set("structures.sand_pyramids.size", 5);
+        
+        config.set("structures.redstone_caves.min_length", 15);
+        config.set("structures.redstone_caves.max_length", 25);
+        config.set("structures.redstone_caves.torch_interval", 3);
+        
+        config.set("structures.mysterious_tunnels.min_length", 20);
+        config.set("structures.mysterious_tunnels.max_length", 40);
+        config.set("structures.mysterious_tunnels.depth", 10);
+        
+        config.set("structures.stripped_trees.radius", 5);
+        config.set("structures.stripped_trees.max_height", 10);
+        
+        config.set("structures.glowstone_e.depth", 5);
+        
+        config.set("structures.wooden_crosses.height", 3);
+        
+        config.set("structures.tripwire_traps.tnt_count", 4);
+        
         // Save advanced settings
         config.set("advanced.debug", debugMode);
         config.set("advanced.max_appearances", maxAppearances);
@@ -92,7 +195,11 @@ public class ConfigManager {
         config.set("advanced.min_appearance_distance", minAppearanceDistance);
         config.set("advanced.max_appearance_distance", maxAppearanceDistance);
         
-        plugin.saveConfig();
+        try {
+            config.save(new java.io.File(plugin.getDataFolder(), "config.yml"));
+        } catch (java.io.IOException e) {
+            plugin.getLogger().severe("Could not save config.yml: " + e.getMessage());
+        }
     }
 
     public boolean isEnabled() {
