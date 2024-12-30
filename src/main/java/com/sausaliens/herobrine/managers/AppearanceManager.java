@@ -829,12 +829,12 @@ public class AppearanceManager implements Listener {
                 treeLoc.setY(treeLoc.getWorld().getHighestBlockYAt(treeLoc));
                 Block block = treeLoc.getBlock();
                 
-                if (block.getType().name().endsWith("_LOG")) {
+                if (block.getType().name().endsWith("LOG")) {
                     for (int y = 0; y < maxHeight; y++) {
                         for (int lx = -2; lx <= 2; lx++) {
                             for (int lz = -2; lz <= 2; lz++) {
                                 Block leafBlock = block.getRelative(lx, y, lz);
-                                if (leafBlock.getType().name().endsWith("_LEAVES")) {
+                                if (leafBlock.getType().name().endsWith("LEAVES")) {
                                     leafBlock.setType(Material.AIR);
                                 }
                             }

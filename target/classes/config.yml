@@ -19,8 +19,13 @@ effects:
   max_stalk_distance: 50
   # Enable/disable fog effects (uses blindness and darkness)
   fog_enabled: true
-  # Fog intensity (0.0 - 1.0, affects blindness and darkness levels)
-  fog_density: 0.1
+  # Fog intensity (0.0 - 1.0)
+  # - 0.0: No fog
+  # - 0.3: Light fog (recommended)
+  # - 0.5: Medium fog
+  # - 0.7: Heavy fog
+  # - 1.0: Maximum fog (very dark)
+  fog_density: 0.3
   # Duration of fog effects in ticks (20 ticks = 1 second)
   fog_duration: 200
   # Enable/disable footstep effects
@@ -82,7 +87,7 @@ structures:
     depth: 5  # Blocks below surface
   
   wooden_crosses:
-    height: 3  # Height of the cross
+    height: 4  # Height of the cross
   
   tripwire_traps:
     tnt_count: 4  # Number of TNT blocks

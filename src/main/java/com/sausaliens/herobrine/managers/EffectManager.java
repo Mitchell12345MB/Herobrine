@@ -255,12 +255,18 @@ public class EffectManager implements Listener {
         int duration = plugin.getConfigManager().getFogDuration();
 
         // Calculate effect amplifiers based on density
-        int blindnessAmplifier = (int) Math.round(density * 2); // 0-2
-        int darknessAmplifier = (int) Math.round(density * 3); // 0-3
+        // Scale density to appropriate ranges:
+        // Blindness: 0-2 (3 levels)
+        // Darkness: 0-3 (4 levels)
+        int blindnessAmplifier = Math.min(2, (int)(density * 2)); // Scales 0.0-1.0 to 0-2
+        int darknessAmplifier = Math.min(3, (int)(density * 3)); // Scales 0.0-1.0 to 0-3
+        
+        // Adjust effect durations based on density
+        int adjustedDuration = (int)(duration * (0.5 + (density * 0.5))); // Lower density = shorter duration
 
         // Apply initial effects
-        player.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, duration, blindnessAmplifier, false, false));
-        player.addPotionEffect(new PotionEffect(PotionEffectType.DARKNESS, duration, darknessAmplifier, false, false));
+        player.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, adjustedDuration, blindnessAmplifier, false, false));
+        player.addPotionEffect(new PotionEffect(PotionEffectType.DARKNESS, adjustedDuration, darknessAmplifier, false, false));
 
         // Create ambient effects task
         BukkitTask fogTask = new BukkitRunnable() {
@@ -268,7 +274,7 @@ public class EffectManager implements Listener {
 
             @Override
             public void run() {
-                if (!player.isOnline() || ticks >= duration) {
+                if (!player.isOnline() || ticks >= adjustedDuration) {
                     cancel();
                     activeFogTasks.remove(player.getUniqueId());
                     // Remove effects when done
