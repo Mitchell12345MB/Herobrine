@@ -16,7 +16,6 @@ import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.Chest;
 import org.bukkit.block.Sign;
-import org.bukkit.block.data.BlockData;
 import org.bukkit.block.data.type.TripwireHook;
 import org.bukkit.block.sign.Side;
 import org.bukkit.entity.EntityType;
@@ -29,6 +28,7 @@ import org.bukkit.event.player.PlayerTeleportEvent;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Vector;
+import org.bukkit.Particle;
 
 import java.util.*;
 
@@ -127,6 +127,13 @@ public class AppearanceManager implements Listener {
         NavigatorParameters params = navigator.getLocalParameters();
         params.speedModifier(1.4f); // Slightly faster than player
         params.distanceMargin(1.5); // How close to get to target
+        params.baseSpeed(0.3f); // Base movement speed
+        params.range(40); // Maximum pathfinding range
+        params.stuckAction(null); // Disable default stuck action
+        params.stationaryTicks(50); // More time before considering NPC stuck
+        params.updatePathRate(10); // Update path less frequently
+        params.useNewPathfinder(true); // Use the newer pathfinder for better results
+        params.straightLineTargetingDistance(20); // Use straight line movement when close
         
         // Make NPC look at player
         LookClose lookTrait = npc.getOrAddTrait(LookClose.class);
@@ -154,6 +161,9 @@ public class AppearanceManager implements Listener {
             boolean isRunningAway = false;
             Location runAwayTarget = null;
             Navigator navigator = npc.getNavigator();
+            int stuckTicks = 0;
+            Location lastLocation = npc.getEntity().getLocation();
+            Vector lastDirection = null;
             
             @Override
             public void run() {
@@ -248,8 +258,99 @@ public class AppearanceManager implements Listener {
                         }
                     }
                 }
+
+                // Check if NPC is stuck
+                Location currentLoc = npc.getEntity().getLocation();
+                if (navigator.isNavigating()) {
+                    Vector currentDirection = navigator.getTargetAsLocation().toVector().subtract(currentLoc.toVector()).normalize();
+                    
+                    // Only consider stuck if we're actually not moving AND trying to go in the same direction
+                    if (currentLoc.distanceSquared(lastLocation) < 0.01 && 
+                        (lastDirection != null && currentDirection.dot(lastDirection) > 0.95)) {
+                        stuckTicks++;
+                        if (stuckTicks > 20) { // Stuck for 1 second
+                            handleStuckNPC(npc, navigator.getTargetAsLocation());
+                            stuckTicks = 0;
+                        }
+                    } else {
+                        stuckTicks = Math.max(0, stuckTicks - 1); // Gradually reduce stuck ticks
+                    }
+                    lastDirection = currentDirection;
+                } else {
+                    stuckTicks = 0;
+                    lastDirection = null;
+                }
+                lastLocation = currentLoc;
             }
         }.runTaskTimer(plugin, 1L, 1L);
+    }
+
+    private void handleStuckNPC(NPC npc, Location target) {
+        if (target == null) return;
+
+        Location npcLoc = npc.getEntity().getLocation();
+        Vector direction = target.toVector().subtract(npcLoc.toVector()).normalize();
+        
+        // Try to find an alternative path first
+        Location[] alternativePoints = {
+            npcLoc.clone().add(direction.clone().rotateAroundY(Math.PI / 4).multiply(3)),
+            npcLoc.clone().add(direction.clone().rotateAroundY(-Math.PI / 4).multiply(3))
+        };
+        
+        for (Location point : alternativePoints) {
+            if (isLocationSafe(point)) {
+                npc.getNavigator().setTarget(point);
+                return;
+            }
+        }
+        
+        // If no alternative path, try building steps
+        if (isHighObstacle(npcLoc.clone().add(direction))) {
+            buildSteps(npcLoc, direction);
+        }
+    }
+
+    private boolean isLocationSafe(Location location) {
+        Block ground = location.getBlock();
+        Block above = ground.getRelative(BlockFace.UP);
+        Block below = ground.getRelative(BlockFace.DOWN);
+        
+        return below.getType().isSolid() && 
+               !ground.getType().isSolid() && 
+               !above.getType().isSolid();
+    }
+
+    private boolean isHighObstacle(Location location) {
+        Block ground = location.getBlock();
+        Block above = ground.getRelative(BlockFace.UP);
+        Block twoAbove = above.getRelative(BlockFace.UP);
+        
+        return ground.getType().isSolid() && above.getType().isSolid() && !twoAbove.getType().isSolid();
+    }
+
+    private void buildSteps(Location start, Vector direction) {
+        Location stepLoc = start.clone().add(direction);
+        Block stepBlock = stepLoc.getBlock();
+        Block above = stepBlock.getRelative(BlockFace.UP);
+        
+        // Only build if we're not destroying anything important
+        if (!stepBlock.getType().isSolid() && !above.getType().isSolid()) {
+            // Place a temporary block (soul sand for thematic effect)
+            stepBlock.setType(Material.SOUL_SAND);
+            
+            // Schedule block removal
+            new BukkitRunnable() {
+                @Override
+                public void run() {
+                    if (stepBlock.getType() == Material.SOUL_SAND) {
+                        stepBlock.setType(Material.AIR);
+                        // Add some particles for effect
+                        stepBlock.getWorld().spawnParticle(Particle.SOUL, stepBlock.getLocation().add(0.5, 0.5, 0.5), 
+                            10, 0.2, 0.2, 0.2, 0.02);
+                    }
+                }
+            }.runTaskLater(plugin, 100L); // Remove after 5 seconds
+        }
     }
 
     private Location findSuitableLocation(Location center, int minDistance, int maxDistance) {
@@ -475,42 +576,47 @@ public class AppearanceManager implements Listener {
         // Create a 3x3x3 chamber underground
         Location base = location.clone().subtract(1, 3, 1); // Moved down by 3 blocks
         
-        // Clear the area first
+        // Clear the area first and create stone walls
         for (int x = 0; x < 3; x++) {
             for (int y = 0; y < 3; y++) {
                 for (int z = 0; z < 3; z++) {
-                    base.clone().add(x, y, z).getBlock().setType(Material.AIR);
+                    Location blockLoc = base.clone().add(x, y, z);
+                    // Make walls out of stone
+                    if (x == 0 || x == 2 || z == 0 || z == 2 || y == 0) {
+                        blockLoc.getBlock().setType(Material.STONE);
+                    } else {
+                        blockLoc.getBlock().setType(Material.AIR);
+                    }
                 }
             }
         }
 
         // Place TNT in a 2x2 pattern
-        base.clone().add(0, 0, 0).getBlock().setType(Material.TNT);
-        base.clone().add(1, 0, 0).getBlock().setType(Material.TNT);
-        base.clone().add(0, 0, 1).getBlock().setType(Material.TNT);
         base.clone().add(1, 0, 1).getBlock().setType(Material.TNT);
         
-        // Place tripwire hooks facing each other
-        Location hook1 = base.clone().add(0, 1, 1);
-        Location hook2 = base.clone().add(2, 1, 1);
+        // Place tripwire hooks and string
+        Block hook1 = base.clone().add(0, 1, 1).getBlock();
+        Block hook2 = base.clone().add(2, 1, 1).getBlock();
+        Block wire = base.clone().add(1, 1, 1).getBlock();
         
-        hook1.getBlock().setType(Material.TRIPWIRE_HOOK);
-        hook2.getBlock().setType(Material.TRIPWIRE_HOOK);
+        // Set hooks
+        hook1.setType(Material.TRIPWIRE_HOOK);
+        hook2.setType(Material.TRIPWIRE_HOOK);
         
         // Configure hooks to face each other
-        BlockData hook1Data = hook1.getBlock().getBlockData();
-        BlockData hook2Data = hook2.getBlock().getBlockData();
-        if (hook1Data instanceof TripwireHook && hook2Data instanceof TripwireHook) {
-            ((TripwireHook) hook1Data).setFacing(BlockFace.EAST);
-            ((TripwireHook) hook1Data).setAttached(true);
-            ((TripwireHook) hook2Data).setFacing(BlockFace.WEST);
-            ((TripwireHook) hook2Data).setAttached(true);
-            hook1.getBlock().setBlockData(hook1Data);
-            hook2.getBlock().setBlockData(hook2Data);
-        }
+        TripwireHook hook1Data = (TripwireHook) hook1.getBlockData();
+        TripwireHook hook2Data = (TripwireHook) hook2.getBlockData();
         
-        // Place string between hooks
-        base.clone().add(1, 1, 1).getBlock().setType(Material.TRIPWIRE);
+        hook1Data.setFacing(BlockFace.EAST);
+        hook2Data.setFacing(BlockFace.WEST);
+        hook1Data.setAttached(true);
+        hook2Data.setAttached(true);
+        
+        hook1.setBlockData(hook1Data);
+        hook2.setBlockData(hook2Data);
+        
+        // Place tripwire string
+        wire.setType(Material.TRIPWIRE);
         
         // Cover the trap with natural blocks
         Material surfaceMaterial = location.getBlock().getType();
@@ -518,21 +624,11 @@ public class AppearanceManager implements Listener {
             surfaceMaterial = Material.GRASS_BLOCK;
         }
 
-        // Fill sides with stone to prevent TNT from being visible
+        // Cover top layer with surface material, leaving center open for tripwire
         for (int x = 0; x < 3; x++) {
             for (int z = 0; z < 3; z++) {
-                // Fill sides at TNT level
-                if (x == 0 || x == 2 || z == 0 || z == 2) {
-                    base.clone().add(x, 0, z).getBlock().setType(Material.STONE);
-                }
-                
-                // Cover top layer with surface material
-                Block coverBlock = base.clone().add(x, 2, z).getBlock();
-                if (x == 1 && z == 1) {
-                    // Leave the center uncovered for the tripwire
-                    coverBlock.setType(Material.AIR);
-                } else {
-                    coverBlock.setType(surfaceMaterial);
+                if (x != 1 || z != 1) { // Skip center block
+                    base.clone().add(x, 2, z).getBlock().setType(surfaceMaterial);
                 }
             }
         }

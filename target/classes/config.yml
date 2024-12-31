@@ -11,6 +11,19 @@ appearance:
 effects:
   # Enable/disable ambient sounds
   ambient_sounds: true
+  # Frequency of ambient sounds (in seconds)
+  # - 5: Very frequent
+  # - 15: Frequent
+  # - 30: Normal (recommended)
+  # - 60: Rare
+  # - 120: Very rare
+  ambient_sound_frequency: 30
+  # Chance for ambient sounds to play (0.0 - 1.0)
+  # - 0.1: Very rare
+  # - 0.3: Rare (recommended)
+  # - 0.5: Normal
+  # - 0.7: Common
+  ambient_sound_chance: 0.3
   # Enable/disable structure manipulation
   structure_manipulation: true
   # Enable/disable stalking behavior

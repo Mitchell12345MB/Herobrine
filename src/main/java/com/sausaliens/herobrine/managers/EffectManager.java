@@ -78,12 +78,12 @@ public class EffectManager implements Listener {
                     cancel();
                     return;
                 }
-                if (random.nextDouble() < 0.3) { // 30% chance to flicker
+                if (random.nextDouble() < plugin.getConfigManager().getAmbientSoundChance()) {
                     Location playerLoc = player.getLocation();
                     player.playSound(playerLoc, Sound.BLOCK_REDSTONE_TORCH_BURNOUT, 0.2f, 0.5f);
                 }
             }
-        }.runTaskTimer(plugin, 20L, 20L);
+        }.runTaskTimer(plugin, 20L, plugin.getConfigManager().getAmbientSoundFrequency() * 20L);
         playerTasks.add(flickerTask);
 
         // Ambient sounds task with randomized timing
@@ -94,18 +94,20 @@ public class EffectManager implements Listener {
                     cancel();
                     return;
                 }
-                playRandomCreepySound(player, location);
-                // Randomly play distant sounds from different directions
-                if (random.nextDouble() < 0.3) {
-                    Location soundLoc = player.getLocation().add(
-                        (random.nextDouble() - 0.5) * 20,
-                        0,
-                        (random.nextDouble() - 0.5) * 20
-                    );
-                    player.playSound(soundLoc, Sound.ENTITY_WARDEN_NEARBY_CLOSE, 0.2f, 0.5f);
+                if (random.nextDouble() < plugin.getConfigManager().getAmbientSoundChance()) {
+                    playRandomCreepySound(player, location);
+                    // Randomly play distant sounds from different directions
+                    if (random.nextDouble() < 0.3) {
+                        Location soundLoc = player.getLocation().add(
+                            (random.nextDouble() - 0.5) * 20,
+                            0,
+                            (random.nextDouble() - 0.5) * 20
+                        );
+                        player.playSound(soundLoc, Sound.ENTITY_WARDEN_NEARBY_CLOSE, 0.2f, 0.5f);
+                    }
                 }
             }
-        }.runTaskTimer(plugin, 40L, 30L + random.nextInt(60));
+        }.runTaskTimer(plugin, 40L, plugin.getConfigManager().getAmbientSoundFrequency() * 20L);
         playerTasks.add(soundTask);
 
         // Particle effects task
@@ -204,11 +206,12 @@ public class EffectManager implements Listener {
             
             // Ambient effects for all players
             for (Player player : Bukkit.getOnlinePlayers()) {
-                if (Math.random() < 0.1) { // 10% chance per player
+                if (Math.random() < plugin.getConfigManager().getAmbientSoundChance() * 0.3) { // Reduced chance for global effects
                     playRandomAmbientEffect(player);
                 }
             }
-        }, 100L, 100L); // Check every 5 seconds
+        }, plugin.getConfigManager().getAmbientSoundFrequency() * 20L, 
+           plugin.getConfigManager().getAmbientSoundFrequency() * 20L);
     }
 
     public void stopEffects() {
@@ -256,17 +259,17 @@ public class EffectManager implements Listener {
 
         // Calculate effect amplifiers based on density
         // Scale density to appropriate ranges:
-        // Blindness: 0-2 (3 levels)
-        // Darkness: 0-3 (4 levels)
-        int blindnessAmplifier = Math.min(2, (int)(density * 2)); // Scales 0.0-1.0 to 0-2
-        int darknessAmplifier = Math.min(3, (int)(density * 3)); // Scales 0.0-1.0 to 0-3
+        // Blindness: 0-1 (2 levels, less intense)
+        // Darkness: 0-1 (2 levels, reduced from 0-2)
+        int blindnessAmplifier = Math.min(1, (int)(density * 1.5)); // Scales 0.0-1.0 to 0-1
+        int darknessAmplifier = Math.min(1, (int)(density * 1.5)); // Scales 0.0-1.0 to 0-1, reduced max level
         
         // Adjust effect durations based on density
-        int adjustedDuration = (int)(duration * (0.5 + (density * 0.5))); // Lower density = shorter duration
+        int adjustedDuration = (int)(duration * (0.3 + (density * 0.4))); // Lower density = much shorter duration
 
-        // Apply initial effects
+        // Apply initial effects with reduced duration for darkness
         player.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, adjustedDuration, blindnessAmplifier, false, false));
-        player.addPotionEffect(new PotionEffect(PotionEffectType.DARKNESS, adjustedDuration, darknessAmplifier, false, false));
+        player.addPotionEffect(new PotionEffect(PotionEffectType.DARKNESS, (int)(adjustedDuration * 0.5), darknessAmplifier, false, false));
 
         // Create ambient effects task
         BukkitTask fogTask = new BukkitRunnable() {

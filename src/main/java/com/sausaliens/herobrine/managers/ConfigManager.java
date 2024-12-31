@@ -30,6 +30,8 @@ public class ConfigManager {
     private int appearanceDuration;
     private int minAppearanceDistance;
     private int maxAppearanceDistance;
+    private int ambientSoundFrequency;
+    private double ambientSoundChance;
 
     public ConfigManager(HerobrinePlugin plugin) {
         this.plugin = plugin;
@@ -57,6 +59,13 @@ public class ConfigManager {
         appearanceFrequency = Math.max(1, config.getInt("appearance.frequency", 300));
         appearanceChance = Math.min(1.0, Math.max(0.0, config.getDouble("appearance.chance", 0.3)));
         ambientSoundsEnabled = config.getBoolean("effects.ambient_sounds", true);
+        ambientSoundFrequency = Math.max(5, Math.min(120, config.getInt("effects.ambient_sound_frequency", 30)));
+        ambientSoundChance = Math.min(1.0, Math.max(0.0, config.getDouble("effects.ambient_sound_chance", 0.3)));
+        
+        // Set these values in config to ensure they exist
+        config.set("effects.ambient_sound_frequency", ambientSoundFrequency);
+        config.set("effects.ambient_sound_chance", ambientSoundChance);
+        
         structureManipulationEnabled = config.getBoolean("effects.structure_manipulation", true);
         stalkingEnabled = config.getBoolean("effects.stalking_enabled", true);
         maxStalkDistance = Math.max(10, Math.min(100, config.getInt("effects.max_stalk_distance", 50)));
@@ -194,6 +203,10 @@ public class ConfigManager {
         config.set("advanced.appearance_duration", appearanceDuration);
         config.set("advanced.min_appearance_distance", minAppearanceDistance);
         config.set("advanced.max_appearance_distance", maxAppearanceDistance);
+        
+        config.set("effects.ambient_sounds", ambientSoundsEnabled);
+        config.set("effects.ambient_sound_frequency", ambientSoundFrequency);
+        config.set("effects.ambient_sound_chance", ambientSoundChance);
         
         try {
             config.save(new java.io.File(plugin.getDataFolder(), "config.yml"));
@@ -485,6 +498,24 @@ public class ConfigManager {
 
     public void setMaxAppearanceDistance(int distance) {
         this.maxAppearanceDistance = Math.max(minAppearanceDistance, distance);
+        saveConfig();
+    }
+
+    public int getAmbientSoundFrequency() {
+        return ambientSoundFrequency;
+    }
+
+    public void setAmbientSoundFrequency(int frequency) {
+        this.ambientSoundFrequency = Math.max(5, Math.min(120, frequency));
+        saveConfig();
+    }
+
+    public double getAmbientSoundChance() {
+        return ambientSoundChance;
+    }
+
+    public void setAmbientSoundChance(double chance) {
+        this.ambientSoundChance = Math.min(1.0, Math.max(0.0, chance));
         saveConfig();
     }
 } 
