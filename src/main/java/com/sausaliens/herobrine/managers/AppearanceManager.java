@@ -44,8 +44,6 @@ public class AppearanceManager implements Listener {
     private static final String TEXTURE = "ewogICJ0aW1lc3RhbXAiIDogMTYxMTk3MTk0NTY0NiwKICAicHJvZmlsZUlkIiA6ICIwNWQ0NTNiZWE0N2Y0MThiOWI2ZDUzODg0MWQxMDY2MCIsCiAgInByb2ZpbGVOYW1lIiA6ICJFY2hvcnJhIiwKICAic2lnbmF0dXJlUmVxdWlyZWQiIDogdHJ1ZSwKICAidGV4dHVyZXMiIDogewogICAgIlNLSU4iIDogewogICAgICAidXJsIiA6ICJodHRwOi8vdGV4dHVyZXMubWluZWNyYWZ0Lm5ldC90ZXh0dXJlLzhkYzYyZDA5ZmEyNmEyMmNkNjU0MWU5N2UwNjE0ZjA4MTQ3YzBjNWFmNGU0MzM3NzY3ZjMxMThmYWQyODExOTYiCiAgICB9CiAgfQp9";
     private static final String SIGNATURE = "CFivZK2Du6OXoEa/G7znPDAv0eGMLOc69aKF6HUvk1woJCzqwIfx/aIZdaKyu0SMPQAcX5ta6zmp6FndHzBc4ehqQCvSlNQQxhYrAG4eaxGGDMYm6uFdPK0l1QamqZ+4EHR0VCayhtYKQcwghr1GkOoR8E3+FibwPZ0MICmovd6by9z/fbPymMIAkpgimsLe583OYO2ab7jsGMkpW5/mf10JQCLcRz2i8QAo0gLTJV5cyx7g2/v1mleLsV1JY3fFO7CmWsWtoamsJtCfW+z4Rs8xqvQunSDngWOIHvPDgAjTKAoGyCg8PlRu4om1URAIOi4xPX+B7z4kPpmEs7cWtlOgABWdsG6IUAZGe5nrL+OVgfJ5wSA+SPk882btwOdLzLa2FfEOOa169Gpfax4sFaQ6Y89ZM3RjtgEimjjUEbQvbj9tkOoT1FzRJ9UJXe933M92q82ikack8/VVOpzYgVbcEeO7hlzC/MfzEV1Iox4ZxYrUB899qDmQWgc4DuJ31V71bEP208ZmvFDffDOOFlO73yoyGt4LO2/IqynVRsnc9vMrf8e5z1WYCjopH6cs1cf/vov+oxZVsIL97Di3c8Ufr7YlUl4Rkp8G2nDHdMYIHKTKhwFMs9MBs/2wR9SUBUDi/2NIZvlbV/Efhk8fyDC0PYAbZJvEC5w01KBhRTg=";
 
-    private static final int VIEW_DISTANCE = 32; // 2 chunks
-
     public AppearanceManager(HerobrinePlugin plugin) {
         this.plugin = plugin;
         this.random = new Random();
@@ -161,9 +159,10 @@ public class AppearanceManager implements Listener {
             boolean isRunningAway = false;
             Location runAwayTarget = null;
             Navigator navigator = npc.getNavigator();
-            int stuckTicks = 0;
             Location lastLocation = npc.getEntity().getLocation();
+            int stationaryTicks = 0;
             Vector lastDirection = null;
+            int stuckTicks = 0;
             
             @Override
             public void run() {
@@ -176,9 +175,12 @@ public class AppearanceManager implements Listener {
                 }
 
                 ticksExisted++;
+                Location npcLoc = npc.getEntity().getLocation();
+                Location playerLoc = player.getLocation();
+                double distanceToPlayer = npcLoc.distance(playerLoc);
                 
                 // Check if player is too close (within 10 blocks)
-                if (player.getLocation().distance(npc.getEntity().getLocation()) < 10) {
+                if (distanceToPlayer < 10) {
                     // If player is sprinting towards Herobrine, increase chance to run
                     double vanishChance = player.isSprinting() ? 0.9 : 0.8;
                     if (Math.random() < vanishChance) {
@@ -189,83 +191,13 @@ public class AppearanceManager implements Listener {
                         return;
                     }
                 }
-                
-                // Every 2 seconds (40 ticks), decide what to do
-                if (ticksExisted % 40 == 0) {
-                    double rand = Math.random();
-                    Location playerLoc = player.getLocation();
-                    Location npcLoc = npc.getEntity().getLocation();
-                    
-                    // Increase chance to run if player is looking at Herobrine
-                    if (isPlayerLookingAt(player, npcLoc)) {
-                        rand += 0.2; // Bias towards running away when looked at
-                    }
-                    
-                    if (rand < 0.3) { // 30% chance to create a trap or structure
-                        Location trapLoc = findSuitableLocation(playerLoc, 10, 20);
-                        if (trapLoc != null) {
-                            createRandomStructure(trapLoc);
-                        }
-                    } else if (rand < 0.6 && !isRunningAway) { // 30% chance to stalk if not already running
-                        Location stalkLoc = findStalkLocation(player);
-                        if (stalkLoc != null) {
-                            navigator.setTarget(stalkLoc);
-                            // Play stalk effects
-                            plugin.getEffectManager().playStalkEffects(player, stalkLoc);
-                            // Add footsteps
-                            plugin.getEffectManager().playFootstepEffects(player);
-                            // Manipulate nearby torches
-                            if (random.nextDouble() < 0.3) { // 30% chance to mess with torches
-                                plugin.getEffectManager().manipulateTorches(stalkLoc, 10);
-                            }
-                            // Chance to leave items in nearby chests
-                            if (random.nextDouble() < 0.15) { // 15% chance to leave items
-                                Location chestLoc = findNearbyChest(stalkLoc);
-                                if (chestLoc != null) {
-                                    plugin.getEffectManager().leaveChestDonation(chestLoc);
-                                }
-                            }
-                        }
-                    } else { // 40% chance to run away (increased from 20%)
-                        if (!isRunningAway) {
-                            runAwayTarget = findRunAwayLocation(player);
-                            if (runAwayTarget != null) {
-                                isRunningAway = true;
-                                navigator.setTarget(runAwayTarget);
-                                // Create a structure at the starting point
-                                createRandomStructure(npc.getEntity().getLocation());
-                            }
-                        }
-                    }
-                }
-
-                // Handle running away behavior every tick
-                if (isRunningAway && runAwayTarget != null) {
-                    Location npcLoc = npc.getEntity().getLocation();
-                    if (npcLoc.distance(runAwayTarget) < 2) {
-                        // Reached target, disappear
-                        plugin.getEffectManager().playAppearanceEffects(player, npcLoc);
-                        removeAppearance(player);
-                        cancel();
-                        return;
-                    }
-
-                    // Update path if player gets too close while running
-                    if (player.getLocation().distance(npcLoc) < 15) {
-                        runAwayTarget = findRunAwayLocation(player);
-                        if (runAwayTarget != null) {
-                            navigator.setTarget(runAwayTarget);
-                        }
-                    }
-                }
 
                 // Check if NPC is stuck
-                Location currentLoc = npc.getEntity().getLocation();
                 if (navigator.isNavigating()) {
-                    Vector currentDirection = navigator.getTargetAsLocation().toVector().subtract(currentLoc.toVector()).normalize();
+                    Vector currentDirection = navigator.getTargetAsLocation().toVector().subtract(npcLoc.toVector()).normalize();
                     
                     // Only consider stuck if we're actually not moving AND trying to go in the same direction
-                    if (currentLoc.distanceSquared(lastLocation) < 0.01 && 
+                    if (npcLoc.distanceSquared(lastLocation) < 0.01 && 
                         (lastDirection != null && currentDirection.dot(lastDirection) > 0.95)) {
                         stuckTicks++;
                         if (stuckTicks > 20) { // Stuck for 1 second
@@ -280,7 +212,77 @@ public class AppearanceManager implements Listener {
                     stuckTicks = 0;
                     lastDirection = null;
                 }
-                lastLocation = currentLoc;
+
+                // Check if Herobrine has been stationary for too long
+                if (npcLoc.distanceSquared(lastLocation) < 0.01) {
+                    stationaryTicks++;
+                    // If stationary for more than 5 seconds (100 ticks) and player is moving away
+                    if (stationaryTicks > 100 && distanceToPlayer > 20) {
+                        // Either follow the player or teleport to a new stalking position
+                        if (Math.random() < 0.7) { // 70% chance to follow
+                            Location stalkLoc = findStalkLocation(player);
+                            if (stalkLoc != null) {
+                                npc.teleport(stalkLoc, PlayerTeleportEvent.TeleportCause.PLUGIN);
+                                plugin.getEffectManager().playAppearanceEffects(player, stalkLoc);
+                            }
+                        } else { // 30% chance to create structure and disappear
+                            createRandomStructure(npcLoc);
+                            plugin.getEffectManager().playAppearanceEffects(player, npcLoc);
+                            removeAppearance(player);
+                            cancel();
+                            return;
+                        }
+                        stationaryTicks = 0;
+                    }
+                } else {
+                    stationaryTicks = 0;
+                }
+
+                // Every 2 seconds (40 ticks), decide what to do
+                if (ticksExisted % 40 == 0) {
+                    double rand = Math.random();
+                    
+                    // Increase chance to run if player is looking at Herobrine
+                    if (isPlayerLookingAt(player, npcLoc)) {
+                        rand += 0.2; // Bias towards running away when looked at
+                    }
+                    
+                    if (rand < 0.3) { // 30% chance to create a trap or structure
+                        Location trapLoc = findSuitableLocation(playerLoc, 10, 20);
+                        if (trapLoc != null && !isNearExistingStructure(trapLoc)) {
+                            createRandomStructure(trapLoc);
+                        }
+                    } else if (rand < 0.6 && !isRunningAway) { // 30% chance to stalk if not already running
+                        Location stalkLoc = findStalkLocation(player);
+                        if (stalkLoc != null) {
+                            navigator.setTarget(stalkLoc);
+                            plugin.getEffectManager().playStalkEffects(player, stalkLoc);
+                            plugin.getEffectManager().playFootstepEffects(player);
+                            if (random.nextDouble() < 0.3) {
+                                plugin.getEffectManager().manipulateTorches(stalkLoc, 10);
+                            }
+                            if (random.nextDouble() < 0.15) {
+                                Location chestLoc = findNearbyChest(stalkLoc);
+                                if (chestLoc != null) {
+                                    plugin.getEffectManager().leaveChestDonation(chestLoc);
+                                }
+                            }
+                        }
+                    } else { // 40% chance to run away
+                        if (!isRunningAway) {
+                            runAwayTarget = findRunAwayLocation(player);
+                            if (runAwayTarget != null) {
+                                isRunningAway = true;
+                                navigator.setTarget(runAwayTarget);
+                                if (Math.random() < 0.5) { // 50% chance to create a structure before running
+                                    createRandomStructure(npc.getEntity().getLocation());
+                                }
+                            }
+                        }
+                    }
+                }
+
+                lastLocation = npcLoc;
             }
         }.runTaskTimer(plugin, 1L, 1L);
     }
@@ -351,6 +353,10 @@ public class AppearanceManager implements Listener {
                 }
             }.runTaskLater(plugin, 100L); // Remove after 5 seconds
         }
+    }
+
+    private boolean isNearExistingStructure(Location location) {
+        return plugin.getAggressionManager().hasStructureWithin(location, 10);
     }
 
     private Location findSuitableLocation(Location center, int minDistance, int maxDistance) {
@@ -591,8 +597,9 @@ public class AppearanceManager implements Listener {
             }
         }
 
-        // Place TNT in a 2x2 pattern
-        base.clone().add(1, 0, 1).getBlock().setType(Material.TNT);
+        // Place TNT under where the tripwire hooks will be
+        base.clone().add(0, 0, 1).getBlock().setType(Material.TNT);
+        base.clone().add(2, 0, 1).getBlock().setType(Material.TNT);
         
         // Place tripwire hooks and string
         Block hook1 = base.clone().add(0, 1, 1).getBlock();
@@ -721,35 +728,57 @@ public class AppearanceManager implements Listener {
         }
     }
 
+    private int getServerViewDistance() {
+        // Get server view distance in blocks (16 blocks per chunk)
+        return plugin.getServer().getViewDistance() * 16;
+    }
+
     private Location findStalkLocation(Player player) {
         Location playerLoc = player.getLocation();
+        int viewDistance = getServerViewDistance();
         
-        // Try to find a location just outside view distance
+        // Try to find a location within view distance but not too close
         for (int attempts = 0; attempts < 10; attempts++) {
-            // Get random angle and distance
-            double angle = Math.random() * 2 * Math.PI;
-            double distance = VIEW_DISTANCE + (Math.random() * 5); // Between view distance and +5 blocks
+            double angle = random.nextDouble() * 2 * Math.PI;
+            double distance = viewDistance * 0.3 + random.nextDouble() * (viewDistance * 0.7); // Between 30% and 100% of view distance
             
-            // Calculate offset
-            double x = Math.cos(angle) * distance;
-            double z = Math.sin(angle) * distance;
+            Location loc = playerLoc.clone().add(
+                Math.cos(angle) * distance,
+                0,
+                Math.sin(angle) * distance
+            );
             
-            // Find a suitable Y coordinate
-            Location loc = playerLoc.clone().add(x, 0, z);
-            loc.setY(playerLoc.getY());
+            // Adjust Y coordinate to ground level
+            loc.setY(loc.getWorld().getHighestBlockYAt(loc));
             
             // Check if location is suitable
-            Block block = loc.getBlock();
-            Block above = block.getRelative(BlockFace.UP);
-            Block below = block.getRelative(BlockFace.DOWN);
+            if (isLocationSafe(loc)) {
+                return loc;
+            }
+        }
+        return null;
+    }
+
+    private Location findRunAwayLocation(Player player) {
+        Location playerLoc = player.getLocation();
+        int viewDistance = getServerViewDistance();
+        
+        // Try to find a location just at the edge of view distance
+        for (int attempts = 0; attempts < 10; attempts++) {
+            double angle = random.nextDouble() * 2 * Math.PI;
+            double distance = viewDistance * 0.8 + random.nextDouble() * (viewDistance * 0.2); // Between 80% and 100% of view distance
             
-            if (below.getType().isSolid() && 
-                !block.getType().isSolid() && 
-                !above.getType().isSolid()) {
-                
-                // Make Herobrine face the player
-                Vector direction = playerLoc.toVector().subtract(loc.toVector()).normalize();
-                loc.setDirection(direction);
+            Location loc = playerLoc.clone().add(
+                Math.cos(angle) * distance,
+                0,
+                Math.sin(angle) * distance
+            );
+            
+            // Adjust Y coordinate to ground level
+            loc.setY(loc.getWorld().getHighestBlockYAt(loc));
+            
+            // Check if location is suitable
+            if (isLocationSafe(loc)) {
                 return loc;
             }
         }
@@ -926,12 +955,26 @@ public class AppearanceManager implements Listener {
                 Block block = treeLoc.getBlock();
                 
                 if (block.getType().name().endsWith("LOG")) {
-                    for (int y = 0; y < maxHeight; y++) {
-                        for (int lx = -2; lx <= 2; lx++) {
-                            for (int lz = -2; lz <= 2; lz++) {
+                    // Find the actual height of the tree
+                    int treeHeight = 0;
+                    while (treeHeight < maxHeight && 
+                           block.getRelative(0, treeHeight, 0).getType().name().endsWith("LOG")) {
+                        treeHeight++;
+                    }
+                    
+                    // Remove leaves in a larger radius around the entire trunk
+                    for (int y = 0; y < treeHeight + 3; y++) { // Go slightly above trunk height
+                        for (int lx = -3; lx <= 3; lx++) {
+                            for (int lz = -3; lz <= 3; lz++) {
                                 Block leafBlock = block.getRelative(lx, y, lz);
                                 if (leafBlock.getType().name().endsWith("LEAVES")) {
                                     leafBlock.setType(Material.AIR);
+                                    // Add some particle effects for the leaves breaking
+                                    leafBlock.getWorld().spawnParticle(
+                                        Particle.CLOUD,
+                                        leafBlock.getLocation().add(0.5, 0.5, 0.5),
+                                        5, 0.2, 0.2, 0.2, 0.02
+                                    );
                                 }
                             }
                         }
@@ -1051,33 +1094,6 @@ public class AppearanceManager implements Listener {
                         }
                     }
                 }
-            }
-        }
-        return null;
-    }
-
-    private Location findRunAwayLocation(Player player) {
-        Location playerLoc = player.getLocation();
-        int attempts = 0;
-        int maxAttempts = 10;
-
-        while (attempts++ < maxAttempts) {
-            // Get a location far away from the player
-            double angle = random.nextDouble() * 2 * Math.PI;
-            double distance = 40 + random.nextDouble() * 20; // Between 40-60 blocks away
-            
-            Location loc = playerLoc.clone().add(
-                Math.cos(angle) * distance,
-                0,
-                Math.sin(angle) * distance
-            );
-
-            // Find the highest block at this location
-            loc.setY(loc.getWorld().getHighestBlockYAt(loc));
-
-            if (loc.getBlock().getType().isSolid()) {
-                loc.add(0, 1, 0);
-                return loc;
             }
         }
         return null;

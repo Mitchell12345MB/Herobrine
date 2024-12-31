@@ -23,6 +23,7 @@ public class AggressionManager implements Listener {
     private final Map<Location, Long> herobrineStructures;
     private final Map<UUID, Long> markedPlayers;
     private final Random random;
+    private final Set<Location> structures = new HashSet<>();
     
     private static final Pattern INSULT_PATTERN = Pattern.compile(
         ".*(pussy|asshole|fart|cuck|dipshit|idiot|inbred|ass|dumbass|bastard|eat|shit|poof|git|wanker|sped|dusty|fuck|gay|screw|faggot|hate|cock|sucker|drop|soap|retard|l|looser|stupid|dumb|noob|weak|fake|trash|bad).*herobrine.*|" +
@@ -238,13 +239,13 @@ public class AggressionManager implements Listener {
     }
 
     public void registerStructure(Location location) {
-        // Register a structure with a timestamp
-        herobrineStructures.put(location, System.currentTimeMillis());
-        
-        // Clean up old structures (older than 30 minutes)
-        long currentTime = System.currentTimeMillis();
-        herobrineStructures.entrySet().removeIf(entry -> 
-            currentTime - entry.getValue() > 1800000); // 30 minutes in milliseconds
+        structures.add(location.clone());
+    }
+
+    public boolean hasStructureWithin(Location location, int radius) {
+        return structures.stream()
+            .anyMatch(struct -> struct.getWorld().equals(location.getWorld()) &&
+                     struct.distanceSquared(location) <= radius * radius);
     }
 
     private boolean isHerobrineStructure(Location location) {
@@ -282,5 +283,6 @@ public class AggressionManager implements Listener {
         aggressionLevels.clear();
         herobrineStructures.clear();
         markedPlayers.clear();
+        structures.clear();
     }
 } 
