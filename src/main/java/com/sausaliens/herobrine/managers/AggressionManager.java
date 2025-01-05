@@ -22,6 +22,7 @@ public class AggressionManager implements Listener {
     private final Map<UUID, Float> aggressionLevels;
     private final Map<Location, Long> herobrineStructures;
     private final Map<UUID, Long> markedPlayers;
+    private final Map<UUID, Integer> structureBlocksDestroyed;
     private final Random random;
     private final Set<Location> structures = new HashSet<>();
     
@@ -49,6 +50,7 @@ public class AggressionManager implements Listener {
         this.aggressionLevels = new HashMap<>();
         this.herobrineStructures = new HashMap<>();
         this.markedPlayers = new HashMap<>();
+        this.structureBlocksDestroyed = new HashMap<>();
         this.random = new Random();
         
         // Start the revenge timer
@@ -215,26 +217,47 @@ public class AggressionManager implements Listener {
         // Check if the broken block was part of a Herobrine structure
         if (isHerobrineStructure(blockLoc)) {
             Player player = event.getPlayer();
+            UUID playerId = player.getUniqueId();
             
-            // Increase aggression significantly
-            increaseAggression(player, 0.5f); // 50% increase
+            // Increment the count of blocks destroyed
+            int blocksDestroyed = structureBlocksDestroyed.getOrDefault(playerId, 0) + 1;
+            structureBlocksDestroyed.put(playerId, blocksDestroyed);
             
-            // Chance to scare player with creeper hiss
-            if (random.nextDouble() < getAggressionLevel(player) * 0.5) {
-                playCreeperScare(player);
-            }
-            
-            // Chance to damage player
-            if (random.nextDouble() < getAggressionLevel(player) * 0.3) {
-                damagePlayer(player);
-            }
-            
-            // Increase appearance chance
-            Bukkit.getScheduler().runTask(plugin, () -> {
-                if (random.nextDouble() < getAggressionLevel(player)) {
-                    plugin.getAppearanceManager().createAppearance(player);
+            // Start reacting after 3 blocks are broken
+            if (blocksDestroyed > 3) {
+                // Calculate aggression increase based on blocks destroyed
+                float aggressionIncrease = Math.min(0.2f * (blocksDestroyed - 3), 0.8f);
+                increaseAggression(player, aggressionIncrease);
+                
+                // Chance for immediate effects increases with blocks destroyed
+                float effectChance = Math.min(0.1f * (blocksDestroyed - 3), 0.9f);
+                
+                if (random.nextFloat() < effectChance) {
+                    // Choose a random effect based on current aggression
+                    float currentAggression = getAggressionLevel(player);
+                    List<Runnable> possibleEffects = new ArrayList<>();
+                    
+                    // Add basic effects
+                    possibleEffects.add(() -> playCreeperScare(player));
+                    possibleEffects.add(() -> damagePlayer(player));
+                    
+                    // Add more severe effects at higher aggression
+                    if (currentAggression > 0.5f) {
+                        possibleEffects.add(() -> {
+                            Bukkit.getScheduler().runTask(plugin, () -> {
+                                plugin.getAppearanceManager().createAppearance(player);
+                            });
+                        });
+                    }
+                    
+                    if (currentAggression > 0.7f) {
+                        possibleEffects.add(() -> markPlayerForRevenge(player));
+                    }
+                    
+                    // Execute a random effect
+                    possibleEffects.get(random.nextInt(possibleEffects.size())).run();
                 }
-            });
+            }
         }
     }
 
@@ -284,5 +307,6 @@ public class AggressionManager implements Listener {
         herobrineStructures.clear();
         markedPlayers.clear();
         structures.clear();
+        structureBlocksDestroyed.clear();
     }
 } 
