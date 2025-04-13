@@ -70,14 +70,14 @@ public class StructureManager implements Listener {
             return;
         }
 
-        plugin.getLogger().info("[Shrine Debug] Block placed: " + block.getType());
-
         // Find the center of the potential shrine
         Location baseLoc = null;
         if (block.getType() == Material.REDSTONE_TORCH) {
             baseLoc = getShrineBaseLocation(block);
-            plugin.getLogger().info("[Shrine Debug] Checking redstone torch placement. Base location: " + 
-                (baseLoc != null ? baseLoc.toString() : "null"));
+            if (plugin.getConfigManager().isDebugMode()) {
+                plugin.getLogger().info("[DEBUG] Checking redstone torch placement. Base location: " + 
+                    (baseLoc != null ? baseLoc.toString() : "null"));
+            }
         } else if (block.getType() == Material.FIRE) {
             // If placing fire, check two blocks down for mossy cobblestone
             Block below = block.getRelative(BlockFace.DOWN); // This is netherrack
@@ -85,32 +85,31 @@ public class StructureManager implements Listener {
                 Block twoDown = below.getRelative(BlockFace.DOWN); // This should be mossy cobblestone
                 if (twoDown.getType() == Material.MOSSY_COBBLESTONE) {
                     baseLoc = twoDown.getLocation();
-                    plugin.getLogger().info("[Shrine Debug] Found shrine base at: " + baseLoc);
-                } else {
-                    plugin.getLogger().info("[Shrine Debug] Block below netherrack is not mossy cobblestone: " + twoDown.getType());
+                    if (plugin.getConfigManager().isDebugMode()) {
+                        plugin.getLogger().info("[DEBUG] Found shrine base at: " + baseLoc);
+                    }
                 }
-            } else {
-                plugin.getLogger().info("[Shrine Debug] Block below fire is not netherrack: " + below.getType());
             }
         }
 
         if (baseLoc == null) {
-            plugin.getLogger().info("[Shrine Debug] No valid base location found");
             return;
         }
         
         if (activeShrine.contains(baseLoc)) {
-            plugin.getLogger().info("[Shrine Debug] Shrine already active at this location");
             return;
         }
 
         // Check if this completes the shrine
-        plugin.getLogger().info("[Shrine Debug] Checking if shrine is complete...");
+        if (plugin.getConfigManager().isDebugMode()) {
+            plugin.getLogger().info("[DEBUG] Checking if shrine is complete...");
+        }
+        
         if (isCompleteShrine(baseLoc)) {
-            plugin.getLogger().info("[Shrine Debug] Shrine complete! Activating...");
+            if (plugin.getConfigManager().isDebugMode()) {
+                plugin.getLogger().info("[DEBUG] Shrine complete! Activating...");
+            }
             handleShrineActivation(baseLoc, player);
-        } else {
-            plugin.getLogger().info("[Shrine Debug] Shrine incomplete");
         }
     }
 
@@ -132,13 +131,11 @@ public class StructureManager implements Listener {
             // For fire, check two blocks down (netherrack -> mossy cobblestone)
             attachedTo = block.getRelative(BlockFace.DOWN, 2);
             if (attachedTo.getType() != Material.MOSSY_COBBLESTONE) {
-                plugin.getLogger().info("[Shrine Debug] Block two blocks below fire is not mossy cobblestone: " + attachedTo.getType());
                 return null;
             }
         }
         
         if (attachedTo == null) {
-            plugin.getLogger().info("[Shrine Debug] Could not find valid base block");
             return null;
         }
 
@@ -148,11 +145,9 @@ public class StructureManager implements Listener {
             for (BlockFace face : new BlockFace[]{BlockFace.NORTH, BlockFace.SOUTH, BlockFace.EAST, BlockFace.WEST}) {
                 Block adjacent = attachedTo.getRelative(face);
                 if (adjacent.getType() == Material.MOSSY_COBBLESTONE) {
-                    plugin.getLogger().info("[Shrine Debug] Found mossy cobblestone next to gold block");
                     return adjacent.getLocation();
                 }
             }
-            plugin.getLogger().info("[Shrine Debug] No mossy cobblestone found next to gold block");
             return null;
         }
         
@@ -165,7 +160,6 @@ public class StructureManager implements Listener {
         
         // Check if the center block is mossy cobblestone
         if (center.getType() != Material.MOSSY_COBBLESTONE) {
-            plugin.getLogger().info("[Shrine Debug] Center block is not mossy cobblestone: " + center.getType());
             return false;
         }
         
@@ -174,14 +168,12 @@ public class StructureManager implements Listener {
         for (BlockFace face : directions) {
             Block goldBlock = center.getRelative(face);
             if (goldBlock.getType() != Material.GOLD_BLOCK) {
-                plugin.getLogger().info("[Shrine Debug] Missing gold block at " + face);
                 return false;
             }
             
             // Check for redstone torch on top of each gold block
             Block above = goldBlock.getRelative(BlockFace.UP);
             if (above.getType() != Material.REDSTONE_TORCH) {
-                plugin.getLogger().info("[Shrine Debug] Missing redstone torch above gold block at " + face);
                 return false;
             }
         }
@@ -189,18 +181,15 @@ public class StructureManager implements Listener {
         // Check for netherrack above mossy cobblestone
         Block netherrack = center.getRelative(BlockFace.UP);
         if (netherrack.getType() != Material.NETHERRACK) {
-            plugin.getLogger().info("[Shrine Debug] No netherrack above mossy cobblestone");
             return false;
         }
         
         // Check if the netherrack is on fire
         Block fireBlock = netherrack.getRelative(BlockFace.UP);
         if (fireBlock.getType() != Material.FIRE) {
-            plugin.getLogger().info("[Shrine Debug] Netherrack is not on fire");
             return false;
         }
         
-        plugin.getLogger().info("[Shrine Debug] All shrine requirements met!");
         return true;
     }
 

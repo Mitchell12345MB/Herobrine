@@ -18,6 +18,7 @@ import org.bukkit.block.Chest;
 import org.bukkit.block.Sign;
 import org.bukkit.block.data.type.TripwireHook;
 import org.bukkit.block.sign.Side;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -39,6 +40,10 @@ public class AppearanceManager implements Listener {
     private final NPCRegistry registry;
     private BukkitTask appearanceTask;
     private BukkitTask cleanupTask;
+    
+    // Memory system to track player encounters
+    private final Map<UUID, PlayerMemory> playerMemories;
+    private final Map<UUID, Long> lastPlayerInteractions;
 
     // Herobrine's skin texture and signature from MineSkin.org
     private static final String TEXTURE = "ewogICJ0aW1lc3RhbXAiIDogMTYxMTk3MTk0NTY0NiwKICAicHJvZmlsZUlkIiA6ICIwNWQ0NTNiZWE0N2Y0MThiOWI2ZDUzODg0MWQxMDY2MCIsCiAgInByb2ZpbGVOYW1lIiA6ICJFY2hvcnJhIiwKICAic2lnbmF0dXJlUmVxdWlyZWQiIDogdHJ1ZSwKICAidGV4dHVyZXMiIDogewogICAgIlNLSU4iIDogewogICAgICAidXJsIiA6ICJodHRwOi8vdGV4dHVyZXMubWluZWNyYWZ0Lm5ldC90ZXh0dXJlLzhkYzYyZDA5ZmEyNmEyMmNkNjU0MWU5N2UwNjE0ZjA4MTQ3YzBjNWFmNGU0MzM3NzY3ZjMxMThmYWQyODExOTYiCiAgICB9CiAgfQp9";
@@ -49,8 +54,11 @@ public class AppearanceManager implements Listener {
         this.random = new Random();
         this.activeAppearances = new HashMap<>();
         this.registry = CitizensAPI.getNPCRegistry();
+        this.playerMemories = new HashMap<>();
+        this.lastPlayerInteractions = new HashMap<>();
         startAppearanceTimer();
         startCleanupTask();
+        startMemoryCleanupTask();
     }
 
     public void startAppearanceTimer() {
@@ -64,12 +72,22 @@ public class AppearanceManager implements Listener {
                 return;
             }
             
-            double chance = plugin.getConfigManager().getAppearanceChance();
-            if (Math.random() < chance) {
-                for (Player player : Bukkit.getOnlinePlayers()) {
-                    if (!isHerobrineNearby(player) && Math.random() < 0.3) { // 30% chance per player
-                        createAppearance(player);
-                    }
+            // Check for all online players
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                // Skip if Herobrine is already active for this player
+                if (isHerobrineNearby(player)) {
+                    continue;
+                }
+                
+                // Get player memory
+                PlayerMemory memory = getPlayerMemory(player);
+                
+                // Calculate adaptive appearance chance based on player's memory
+                double adaptiveChance = calculateAdaptiveAppearanceChance(player, memory);
+                
+                if (Math.random() < adaptiveChance) {
+                    // Create appearance with delay based on player's context
+                    scheduleAppearanceForPlayer(player, memory);
                 }
             }
         }, frequency, frequency);
@@ -109,6 +127,9 @@ public class AppearanceManager implements Listener {
             removeAppearance(player);
         }
         
+        // Update player memories
+        updatePlayerMemory(player);
+        
         // Create Herobrine NPC
         NPC npc = registry.createNPC(EntityType.PLAYER, "Herobrine");
         npc.setProtected(true);
@@ -130,7 +151,6 @@ public class AppearanceManager implements Listener {
         params.stuckAction(null); // Disable default stuck action
         params.stationaryTicks(50); // More time before considering NPC stuck
         params.updatePathRate(10); // Update path less frequently
-        params.useNewPathfinder(true); // Use the newer pathfinder for better results
         params.straightLineTargetingDistance(20); // Use straight line movement when close
         
         // Make NPC look at player
@@ -154,6 +174,9 @@ public class AppearanceManager implements Listener {
     }
 
     private void startBehaviorCheckTask(Player player, NPC npc) {
+        // Get player memory data
+        PlayerMemory memory = getPlayerMemory(player);
+        
         new BukkitRunnable() {
             int ticksExisted = 0;
             boolean isRunningAway = false;
@@ -181,9 +204,22 @@ public class AppearanceManager implements Listener {
                 
                 // Check if player is too close (within 10 blocks)
                 if (distanceToPlayer < 10) {
-                    // If player is sprinting towards Herobrine, increase chance to run
+                    // Adjust vanish chance based on player history
                     double vanishChance = player.isSprinting() ? 0.9 : 0.8;
+                    
+                    // Adjust based on how aggressively player has chased Herobrine in the past
+                    if (memory.hasAggressivelyChased) {
+                        vanishChance += 0.05; // More likely to flee from aggressive players
+                    }
+                    
+                    // Adjust based on how many times player has seen Herobrine
+                    vanishChance -= Math.min(0.2, memory.encounterCount * 0.01); // Up to 20% less likely to disappear for regular encounters
+                    
                     if (Math.random() < vanishChance) {
+                        // Remember that we fled from this player
+                        memory.fleeCount++;
+                        memory.lastFleeTime = System.currentTimeMillis();
+                        
                         Location disappearLoc = npc.getEntity().getLocation();
                         plugin.getEffectManager().playAppearanceEffects(player, disappearLoc);
                         removeAppearance(player);
@@ -244,10 +280,43 @@ public class AppearanceManager implements Listener {
                     
                     // Increase chance to run if player is looking at Herobrine
                     if (isPlayerLookingAt(player, npcLoc)) {
-                        rand += 0.2; // Bias towards running away when looked at
+                        // More sophisticated response to being spotted
+                        memory.spottedCount++;
+                        
+                        // Adjust reaction based on how often this player spots Herobrine
+                        if (memory.spottedCount < 5) {
+                            rand += 0.3; // New players who spot Herobrine trigger stronger flee response
+                        } else if (memory.spottedCount < 10) {
+                            rand += 0.2; // Regular spotters get standard response
+                        } else {
+                            rand += 0.1; // Frequent spotters get diminished response (Herobrine is less afraid)
+                        }
                     }
                     
-                    if (rand < 0.3) { // 30% chance to create a trap or structure
+                    // Adjust behavior based on memory
+                    // If player chases a lot, increase structure building or hiding behavior
+                    if (memory.hasAggressivelyChased) {
+                        rand -= 0.1; // More likely to create structures or stalk
+                    }
+                    
+                    // If player has destroyed Herobrine structures before, more likely to be elusive
+                    if (memory.hasDestroyedStructures) {
+                        rand += 0.1; // More likely to run
+                    }
+                    
+                    // Adjust behavior based on more personality factors
+                    if (memory.playerIsAggressive) {
+                        // If player is aggressive, Herobrine is more likely to confront with structures
+                        rand -= 0.15; // Even more likely to build structures or stalk
+                    }
+                    
+                    // Use fleeCount to adjust behavior
+                    if (memory.fleeCount > 5) {
+                        // If Herobrine has fled many times, mix up behavior to be less predictable
+                        rand = rand * 0.7 + (Math.random() * 0.3); // Add randomness to behavior
+                    }
+                    
+                    if (rand < 0.3) { // ~30% chance to create a trap or structure
                         Location trapLoc = findSuitableLocation(playerLoc, 10, 20);
                         if (trapLoc != null && !isNearExistingStructure(trapLoc)) {
                             createRandomStructure(trapLoc);
@@ -461,8 +530,17 @@ public class AppearanceManager implements Listener {
                 Location playerLoc = player.getLocation();
                 Location npcLoc = npc.getEntity().getLocation();
                 
-                // React to player sprinting
+                // Get player memory
+                PlayerMemory memory = getPlayerMemory(player);
+                
+                // Track if player is chasing Herobrine
                 if (player.isSprinting() && playerLoc.distance(npcLoc) < 15) {
+                    // Mark player as having chased Herobrine
+                    memory.chaseCount++;
+                    if (memory.chaseCount >= 3) {
+                        memory.hasAggressivelyChased = true;
+                    }
+                    
                     Navigator navigator = npc.getNavigator();
                     Location runTo = findRunAwayLocation(player);
                     if (runTo != null) {
@@ -472,10 +550,25 @@ public class AppearanceManager implements Listener {
                 
                 // If player is looking directly at Herobrine and is within 20 blocks, higher chance to vanish
                 if (isPlayerLookingAt(player, npcLoc) && 
-                    playerLoc.distance(npcLoc) < 20 && 
-                    Math.random() < 0.4) {
-                    plugin.getEffectManager().playAppearanceEffects(player, npcLoc);
-                    removeAppearance(player);
+                    playerLoc.distance(npcLoc) < 20) {
+                    
+                    // Adjust vanish chance based on memory
+                    double vanishChance = 0.4;
+                    
+                    // If player frequently chases, increase vanish chance
+                    if (memory.hasAggressivelyChased) {
+                        vanishChance += 0.1;
+                    }
+                    
+                    // If player has seen Herobrine many times, slightly decrease chance
+                    vanishChance -= Math.min(0.15, memory.encounterCount * 0.01);
+                    
+                    if (Math.random() < vanishChance) {
+                        memory.fleeCount++;
+                        memory.lastFleeTime = System.currentTimeMillis();
+                        plugin.getEffectManager().playAppearanceEffects(player, npcLoc);
+                        removeAppearance(player);
+                    }
                 }
             }
         }
@@ -574,8 +667,23 @@ public class AppearanceManager implements Listener {
         return null;
     }
 
+    /**
+     * Checks if a Herobrine entity is currently present near a player
+     * @param player The player to check for nearby Herobrine
+     * @return true if Herobrine is already nearby, false otherwise
+     */
     private boolean isHerobrineNearby(Player player) {
-        return activeAppearances.containsKey(player.getUniqueId());
+        // Search for any Herobrine entities within 50 blocks of the player
+        for (Entity entity : player.getWorld().getEntities()) {
+            // Check if the entity is a NPC/Citizens entity with Herobrine traits
+            if (entity.hasMetadata("NPC") && entity.getLocation().distance(player.getLocation()) < 50) {
+                // Check if this NPC is a Herobrine entity
+                if (entity.hasMetadata("herobrine")) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private void createTripwireTrap(Location location) {
@@ -823,40 +931,310 @@ public class AppearanceManager implements Listener {
 
     private void createRandomStructure(Location location) {
         Map<String, Double> chances = plugin.getConfigManager().getStructureChances();
+        
+        // If this is tied to a player, potentially use their preferences
+        Player nearestPlayer = findNearestPlayer(location, 50);
+        if (nearestPlayer != null) {
+            PlayerMemory memory = getPlayerMemory(nearestPlayer);
+            
+            // 60% chance to use adaptive behavior if player has enough encounters
+            if (memory.encounterCount > 3 && Math.random() < 0.6) {
+                // Choose structure based on what has been most effective for this player
+                String mostEffectiveType = memory.getMostEffectiveStructure();
+                
+                createStructureByType(mostEffectiveType, location);
+                
+                // Register structure with nearest player for tracking reactions
+                registerStructureWithPlayer(location, nearestPlayer, mostEffectiveType);
+                return;
+            }
+        }
+        
+        // Default random behavior if not using adaptive logic
         double random = Math.random();
         double cumulative = 0.0;
         
         for (Map.Entry<String, Double> entry : chances.entrySet()) {
             cumulative += entry.getValue();
             if (random < cumulative) {
-                switch (entry.getKey()) {
-                    case "sand_pyramids":
-                        createSandPyramid(location);
-                        break;
-                    case "redstone_caves":
-                        createRedstoneTorchCave(location);
-                        break;
-                    case "stripped_trees":
-                        createStrippedTrees(location);
-                        break;
-                    case "mysterious_tunnels":
-                        createMysteriousTunnel(location);
-                        break;
-                    case "glowstone_e":
-                        createGlowstoneE(location);
-                        break;
-                    case "wooden_crosses":
-                        createWoodenCross(location);
-                        break;
-                    case "tripwire_traps":
-                        createTripwireTrap(location);
-                        break;
-                    case "creepy_signs":
-                        placeCreepySign(location);
-                        break;
+                createStructureByType(entry.getKey(), location);
+                
+                // Register structure with nearest player for tracking reactions
+                if (nearestPlayer != null) {
+                    registerStructureWithPlayer(location, nearestPlayer, entry.getKey());
                 }
                 return;
             }
+        }
+    }
+    
+    private void createStructureByType(String structureType, Location location) {
+        switch (structureType) {
+            case "sand_pyramids":
+                createSandPyramid(location);
+                break;
+            case "redstone_caves":
+                createRedstoneTorchCave(location);
+                break;
+            case "stripped_trees":
+                createStrippedTrees(location);
+                break;
+            case "mysterious_tunnels":
+                createMysteriousTunnel(location);
+                break;
+            case "glowstone_e":
+                createGlowstoneE(location);
+                break;
+            case "wooden_crosses":
+                createWoodenCross(location);
+                break;
+            case "tripwire_traps":
+                createTripwireTrap(location);
+                break;
+            case "creepy_signs":
+                placeCreepySign(location);
+                break;
+        }
+    }
+    
+    // Track structures with associated players to measure reactions
+    private final Map<Location, StructureTracking> structureTracking = new HashMap<>();
+    
+    /**
+     * Tracks player interactions with Herobrine structures
+     * Used for adaptive behavior learning system
+     */
+    private static class StructureTracking {
+        final UUID playerId; // Player who encountered this structure
+        final String structureType; // Type of structure created
+        final long creationTime; // When the structure was created (for timing-based events)
+        boolean playerHasSeen = false; // Tracks if player has seen the structure
+        boolean playerHasReacted = false; // Tracks if player actively interacted with structure
+        int reactionStrength = 0; // How strongly player reacted (0-10)
+        
+        StructureTracking(UUID playerId, String structureType) {
+            this.playerId = playerId;
+            this.structureType = structureType;
+            this.creationTime = System.currentTimeMillis();
+        }
+    }
+    
+    private void registerStructureWithPlayer(Location location, Player player, String structureType) {
+        StructureTracking tracking = new StructureTracking(player.getUniqueId(), structureType);
+        structureTracking.put(location, tracking);
+        
+        // Schedule a task to check for player reaction
+        Bukkit.getScheduler().runTaskLater(plugin, () -> 
+            checkPlayerReactionToStructure(location, player), 100L); // Check after 5 seconds
+        
+        // Schedule cleanup
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            StructureTracking existingTracking = structureTracking.get(location);
+            if (existingTracking != null) {
+                // If the player reacted to the structure, record a final effectiveness boost
+                if (existingTracking.playerHasReacted) {
+                    Player targetPlayer = Bukkit.getPlayer(existingTracking.playerId);
+                    if (targetPlayer != null && targetPlayer.isOnline()) {
+                        PlayerMemory memory = getPlayerMemory(targetPlayer);
+                        // Structures that players actively interact with are more effective
+                        memory.recordStructureReaction(existingTracking.structureType, existingTracking.reactionStrength + 2);
+                    }
+                }
+                structureTracking.remove(location);
+            }
+        }, 12000L); // Remove after 10 minutes
+    }
+    
+    private void checkPlayerReactionToStructure(Location location, Player player) {
+        StructureTracking tracking = structureTracking.get(location);
+        if (tracking == null || !player.isOnline()) return;
+        
+        // Calculate distance to structure
+        double distance = player.getLocation().distance(location);
+        
+        // Check if player has seen the structure (came within 15 blocks)
+        if (distance < 15) {
+            tracking.playerHasSeen = true;
+            
+            // Player is examining the structure closely - strong reaction
+            if (distance < 5) {
+                tracking.playerHasReacted = true;
+                tracking.reactionStrength = 8;
+                
+                // Record effectiveness in player memory
+                PlayerMemory memory = getPlayerMemory(player);
+                memory.recordStructureReaction(tracking.structureType, tracking.reactionStrength);
+                
+                // Examine how long the structure has existed
+                long structureAge = System.currentTimeMillis() - tracking.creationTime;
+                long fiveMinutesInMs = 5 * 60 * 1000;
+                
+                // If structure was found quickly, it was more effective
+                if (structureAge < fiveMinutesInMs) {
+                    // Increase the reaction strength based on how quickly it was found
+                    int quickDiscoveryBonus = (int)(2.0 * (1.0 - (structureAge / (double)fiveMinutesInMs)));
+                    tracking.reactionStrength += quickDiscoveryBonus;
+                    
+                    // Record updated effectiveness with bonus
+                    memory.recordStructureReaction(tracking.structureType, tracking.reactionStrength);
+                }
+                
+                // Chance for Herobrine to make an appearance if player is examining structure
+                if (Math.random() < 0.3) {
+                    Location appearLoc = findAppearanceLocation(player);
+                    if (appearLoc != null) {
+                        createAppearance(player, appearLoc);
+                    }
+                }
+                return;
+            }
+            
+            // Schedule another check if player has seen it but not reacted strongly yet
+            Bukkit.getScheduler().runTaskLater(plugin, () -> 
+                checkPlayerReactionToStructure(location, player), 100L); // Check again after 5 seconds
+        } else if (!tracking.playerHasSeen) {
+            // Player hasn't seen it yet, check again later
+            Bukkit.getScheduler().runTaskLater(plugin, () -> 
+                checkPlayerReactionToStructure(location, player), 200L); // Check again after 10 seconds
+            
+            // If structure has existed for more than 10 minutes without being seen,
+            // record it as less effective
+            long structureAge = System.currentTimeMillis() - tracking.creationTime;
+            if (structureAge > 10 * 60 * 1000) { // 10 minutes
+                // Use player ID to find the player memory
+                UUID playerId = tracking.playerId;
+                Player targetPlayer = Bukkit.getPlayer(playerId);
+                if (targetPlayer != null && targetPlayer.isOnline()) {
+                    PlayerMemory memory = getPlayerMemory(targetPlayer);
+                    // Record that this structure type wasn't very effective (not noticed)
+                    memory.recordStructureReaction(tracking.structureType, 2); // Low effectiveness score
+                }
+            }
+        }
+    }
+    
+    // Find the nearest player to a location
+    private Player findNearestPlayer(Location location, double maxDistance) {
+        Player nearestPlayer = null;
+        double nearestDistance = maxDistance;
+        
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (player.getWorld().equals(location.getWorld())) {
+                double distance = player.getLocation().distance(location);
+                if (distance < nearestDistance) {
+                    nearestPlayer = player;
+                    nearestDistance = distance;
+                }
+            }
+        }
+        
+        return nearestPlayer;
+    }
+
+    // Memory management methods
+    private PlayerMemory getPlayerMemory(Player player) {
+        UUID playerId = player.getUniqueId();
+        PlayerMemory memory = playerMemories.get(playerId);
+        if (memory == null) {
+            memory = new PlayerMemory();
+            playerMemories.put(playerId, memory);
+        }
+        return memory;
+    }
+    
+    private void updatePlayerMemory(Player player) {
+        UUID playerId = player.getUniqueId();
+        PlayerMemory memory = getPlayerMemory(player);
+        memory.encounterCount++;
+        memory.lastEncounterTime = System.currentTimeMillis();
+        lastPlayerInteractions.put(playerId, System.currentTimeMillis());
+        
+        // If there's an aggression level for this player, use it to inform behavior
+        float aggressionLevel = plugin.getAggressionManager().getAggressionLevel(player);
+        if (aggressionLevel > 0.5f) {
+            memory.playerIsAggressive = true;
+        }
+    }
+    
+    public void recordStructureDestroyed(Player player) {
+        PlayerMemory memory = getPlayerMemory(player);
+        memory.structuresDestroyed++;
+        if (memory.structuresDestroyed >= 2) {
+            memory.hasDestroyedStructures = true;
+        }
+    }
+    
+    private void startMemoryCleanupTask() {
+        // Clean up old memories every hour
+        Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            long currentTime = System.currentTimeMillis();
+            long oneWeekAgo = currentTime - (7 * 24 * 60 * 60 * 1000); // One week in milliseconds
+            
+            // Remove memories for players who haven't been seen in a week
+            playerMemories.entrySet().removeIf(entry -> {
+                PlayerMemory memory = entry.getValue();
+                return memory.lastEncounterTime < oneWeekAgo;
+            });
+            
+            // Remove last interaction records for players who haven't been seen in a week
+            lastPlayerInteractions.entrySet().removeIf(entry -> entry.getValue() < oneWeekAgo);
+            
+        }, 72000L, 72000L); // Run every hour (72000 ticks)
+    }
+    
+    /**
+     * Player memory system to make Herobrine "learn" player behaviors and preferences
+     * Creates personalized haunting experiences that evolve over time
+     */
+    private static class PlayerMemory {
+        // Core encounter tracking
+        int encounterCount = 0; // Total number of Herobrine encounters
+        int spottedCount = 0; // Times player directly spotted Herobrine
+        int chaseCount = 0; // Times player chased Herobrine
+        int fleeCount = 0; // Times Herobrine fled from player
+        int structuresDestroyed = 0; // Structures player has destroyed
+        
+        // Behavior flags
+        boolean hasAggressivelyChased = false; // Player actively pursues Herobrine
+        boolean hasDestroyedStructures = false; // Player destroys Herobrine's structures
+        boolean playerIsAggressive = false; // Player has high aggression level
+        
+        // Timestamps
+        long lastEncounterTime = 0; // Last time player encountered Herobrine
+        long lastFleeTime = 0; // Last time Herobrine fled from player
+        
+        // Behavior adaptation tracking
+        Map<String, Integer> structureEffectiveness = new HashMap<>(); // Track which structures are most effective
+        
+        /*
+         * FUTURE EXPANSION FIELDS:
+         * These fields will be used in future updates to enhance Herobrine's adaptive behaviors
+         * by learning which tactics are most effective for each individual player
+         */
+        // int torchManipulationEffectiveness = 0; // How effective torch manipulation is for scaring this player
+        // int windowAppearanceEffectiveness = 0; // How effective window appearances are
+        // int stalkedPlayerReactions = 0; // How player reacts to being stalked
+        // int footstepEffectiveness = 0; // How effective footstep sounds are
+        
+        /**
+         * Records player's reaction to a structure type
+         * Used for learning which structures are most effective
+         */
+        void recordStructureReaction(String structureType, int reactionStrength) {
+            int current = structureEffectiveness.getOrDefault(structureType, 5);
+            // Weighted average - 70% old value, 30% new reaction
+            int newValue = (int)((current * 0.7) + (reactionStrength * 0.3));
+            structureEffectiveness.put(structureType, Math.max(1, Math.min(10, newValue)));
+        }
+        
+        /**
+         * Returns the structure type that has been most effective for this player
+         */
+        String getMostEffectiveStructure() {
+            return structureEffectiveness.entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .map(Map.Entry::getKey)
+                .orElse("sand_pyramids"); // Default if no data
         }
     }
 
@@ -1097,5 +1475,155 @@ public class AppearanceManager implements Listener {
             }
         }
         return null;
+    }
+
+    private double calculateAdaptiveAppearanceChance(Player player, PlayerMemory memory) {
+        double baseChance = plugin.getConfigManager().getAppearanceChance();
+        double adjustedChance = baseChance;
+        
+        // Increase chance slightly for players who have seen Herobrine more often
+        // (familiarity breeds curiosity)
+        if (memory.encounterCount > 5) {
+            adjustedChance += Math.min(0.1, memory.encounterCount * 0.01);
+        }
+        
+        // Decrease chance for players who have seen Herobrine very recently
+        // to avoid flooding them with appearances
+        long timeSinceLastEncounter = System.currentTimeMillis() - memory.lastEncounterTime;
+        long oneHourInMillis = 60 * 60 * 1000;
+        
+        if (memory.lastEncounterTime > 0 && timeSinceLastEncounter < oneHourInMillis) {
+            // Reduce chance if it's been less than an hour since last encounter
+            adjustedChance *= (0.3 + (0.7 * timeSinceLastEncounter / oneHourInMillis));
+        }
+        
+        // Increase chance based on player's observed behavior patterns
+        // More active players see Herobrine more often
+        if (isPlayerActive(player)) {
+            adjustedChance *= 1.2;
+        }
+        
+        // Increase chance during night time or in dark areas
+        if (isEnvironmentDark(player)) {
+            adjustedChance *= 1.5;
+        }
+        
+        // Increase chance if player is in an isolated/vulnerable location
+        if (isPlayerIsolated(player)) {
+            adjustedChance *= 1.3;
+        }
+        
+        // Use additional memory metrics to adjust chance
+        
+        // Players who actively look for Herobrine (high spotted count) see him more often
+        if (memory.spottedCount > 5) {
+            adjustedChance *= 1.0 + Math.min(0.3, memory.spottedCount * 0.02);
+        }
+        
+        // Aggressive players who scare Herobrine away often (high flee count) see him less frequently
+        if (memory.fleeCount > 3) {
+            // Herobrine becomes more cautious around players who made him flee a lot
+            adjustedChance *= Math.max(0.6, 1.0 - (memory.fleeCount * 0.05));
+        }
+        
+        // Adjust based on time since last flee
+        if (memory.lastFleeTime > 0) {
+            long timeSinceLastFlee = System.currentTimeMillis() - memory.lastFleeTime;
+            // Gradually increase chance as more time passes since last flee
+            if (timeSinceLastFlee < 30 * 60 * 1000) { // 30 minutes
+                adjustedChance *= Math.max(0.3, timeSinceLastFlee / (30.0 * 60 * 1000));
+            }
+        }
+        
+        // Players with high aggression from AggressionManager have higher chance
+        if (memory.playerIsAggressive) {
+            adjustedChance *= 1.4; // More aggressive haunting for players who trigger aggression
+        }
+        
+        // Cap the final chance
+        return Math.min(0.5, adjustedChance);
+    }
+
+    private void scheduleAppearanceForPlayer(Player player, PlayerMemory memory) {
+        // Determine how long to wait before appearing
+        long delay = calculateAppearanceDelay(player, memory);
+        
+        // Schedule the appearance
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            // Double-check player is still online and Herobrine isn't already present
+            if (player.isOnline() && !isHerobrineNearby(player)) {
+                createAppearance(player);
+            }
+        }, delay);
+    }
+    
+    private long calculateAppearanceDelay(Player player, PlayerMemory memory) {
+        // Base delay between 5-30 seconds
+        long baseDelay = 5 + random.nextInt(25);
+        
+        // Shorter delays for players who chase/pursue Herobrine (reward curiosity)
+        if (memory.hasAggressivelyChased) {
+            baseDelay = Math.max(5, baseDelay - 10);
+        }
+        
+        // Players with high spotting count get faster appearances (Herobrine likes an audience)
+        if (memory.spottedCount > 5) {
+            baseDelay = Math.max(3, baseDelay - (memory.spottedCount / 5));
+        }
+        
+        // Longer delays when player is in a safe/lit area
+        if (!isEnvironmentDark(player)) {
+            baseDelay += 10;
+        }
+        
+        // Longer delays for players who recently made Herobrine flee
+        if (memory.lastFleeTime > 0) {
+            long timeSinceLastFlee = System.currentTimeMillis() - memory.lastFleeTime;
+            if (timeSinceLastFlee < 10 * 60 * 1000) { // 10 minutes
+                // Add up to 20 seconds delay for recent flee events
+                baseDelay += Math.max(0, 20 - (timeSinceLastFlee / (30 * 1000)));
+            }
+        }
+        
+        // Aggressive players get more immediate responses (Herobrine fights back)
+        if (memory.playerIsAggressive) {
+            baseDelay = Math.max(2, baseDelay - 15); // Much quicker responses
+        }
+        
+        return baseDelay * 20L; // Convert to ticks
+    }
+    
+    private boolean isPlayerActive(Player player) {
+        // This could be expanded with more sophisticated activity tracking
+        return player.getStatistic(org.bukkit.Statistic.WALK_ONE_CM) > 
+               player.getStatistic(org.bukkit.Statistic.PLAY_ONE_MINUTE) / 2;
+    }
+    
+    private boolean isEnvironmentDark(Player player) {
+        // Check both world time and block light level
+        boolean isNightTime = player.getWorld().getTime() > 12000 && player.getWorld().getTime() < 24000;
+        boolean isDarkLocation = player.getLocation().getBlock().getLightLevel() < 8;
+        
+        return isNightTime || isDarkLocation;
+    }
+    
+    /**
+     * Determines if a player is in an isolated location
+     * Isolated players are more likely to encounter Herobrine
+     */
+    private boolean isPlayerIsolated(Player player) {
+        // Check if player is alone (no other players nearby)
+        for (Player otherPlayer : player.getWorld().getPlayers()) {
+            if (otherPlayer != player && otherPlayer.getLocation().distance(player.getLocation()) < 50) {
+                return false; // Not isolated - other players are nearby
+            }
+        }
+        
+        // Check if player is underground (underground locations feel more isolated)
+        int highestY = player.getWorld().getHighestBlockYAt(player.getLocation());
+        boolean isUnderground = player.getLocation().getBlockY() < highestY - 5;
+        
+        // Being underground increases the feeling of isolation
+        return isUnderground || player.getWorld().getTime() > 13000; // Underground or nighttime
     }
 } 

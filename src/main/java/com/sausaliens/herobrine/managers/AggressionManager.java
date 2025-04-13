@@ -286,7 +286,7 @@ public class AggressionManager implements Listener {
         aggressionLevels.put(playerId, newLevel);
     }
 
-    private float getAggressionLevel(Player player) {
+    public float getAggressionLevel(Player player) {
         return aggressionLevels.getOrDefault(player.getUniqueId(), 0.0f);
     }
 
