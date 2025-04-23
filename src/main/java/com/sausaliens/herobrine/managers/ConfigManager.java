@@ -24,6 +24,7 @@ public class ConfigManager {
     private int torchManipulationRadius;
     private double torchConversionChance;
     private double torchRemovalChance;
+    private boolean screenShakeEnabled;
     // Advanced settings
     private boolean debugMode;
     private int maxAppearances;
@@ -32,6 +33,15 @@ public class ConfigManager {
     private int maxAppearanceDistance;
     private int ambientSoundFrequency;
     private double ambientSoundChance;
+    // Paranoia settings
+    private boolean paranoiaEnabled;
+    private double initialExposure;
+    private double exposureGrowthRate;
+    private int farAppearanceDistance;
+    private boolean distantSilhouettesEnabled;
+    private boolean peripheralAppearancesEnabled;
+    private double vanishWhenSeenChance;
+    private boolean adaptiveEffectsEnabled;
 
     public ConfigManager(HerobrinePlugin plugin) {
         this.plugin = plugin;
@@ -78,6 +88,7 @@ public class ConfigManager {
         torchManipulationRadius = Math.max(5, Math.min(20, config.getInt("effects.torch_manipulation_radius", 10)));
         torchConversionChance = Math.min(1.0, Math.max(0.0, config.getDouble("effects.torch_conversion_chance", 0.7)));
         torchRemovalChance = Math.min(1.0, Math.max(0.0, config.getDouble("effects.torch_removal_chance", 0.3)));
+        screenShakeEnabled = config.getBoolean("effects.screen_shake_enabled", true);
         
         // Load advanced settings with validation
         debugMode = config.getBoolean("advanced.debug", false);
@@ -85,6 +96,26 @@ public class ConfigManager {
         appearanceDuration = Math.max(1, config.getInt("advanced.appearance_duration", 10));
         minAppearanceDistance = Math.max(5, config.getInt("advanced.min_appearance_distance", 15));
         maxAppearanceDistance = Math.max(minAppearanceDistance, config.getInt("advanced.max_appearance_distance", 25));
+
+        // Load paranoia settings
+        paranoiaEnabled = config.getBoolean("paranoia.enabled", true);
+        initialExposure = Math.min(1.0, Math.max(0.0, config.getDouble("paranoia.initial_exposure", 0.1)));
+        exposureGrowthRate = Math.min(1.0, Math.max(0.001, config.getDouble("paranoia.exposure_growth_rate", 0.05)));
+        farAppearanceDistance = Math.max(maxAppearanceDistance + 5, config.getInt("paranoia.far_appearance_distance", 50));
+        distantSilhouettesEnabled = config.getBoolean("paranoia.distant_silhouettes", true);
+        peripheralAppearancesEnabled = config.getBoolean("paranoia.peripheral_appearances", true);
+        vanishWhenSeenChance = Math.min(1.0, Math.max(0.0, config.getDouble("paranoia.vanish_when_seen_chance", 0.8)));
+        adaptiveEffectsEnabled = config.getBoolean("paranoia.adaptive_effects", true);
+
+        // Set paranoia values in config to ensure they exist
+        config.set("paranoia.enabled", paranoiaEnabled);
+        config.set("paranoia.initial_exposure", initialExposure);
+        config.set("paranoia.exposure_growth_rate", exposureGrowthRate);
+        config.set("paranoia.far_appearance_distance", farAppearanceDistance);
+        config.set("paranoia.distant_silhouettes", distantSilhouettesEnabled);
+        config.set("paranoia.peripheral_appearances", peripheralAppearancesEnabled);
+        config.set("paranoia.vanish_when_seen_chance", vanishWhenSeenChance);
+        config.set("paranoia.adaptive_effects", adaptiveEffectsEnabled);
 
         // Validate structure settings
         String[] structureTypes = {
@@ -157,6 +188,7 @@ public class ConfigManager {
         config.set("effects.torch_manipulation_radius", torchManipulationRadius);
         config.set("effects.torch_conversion_chance", torchConversionChance);
         config.set("effects.torch_removal_chance", torchRemovalChance);
+        config.set("effects.screen_shake_enabled", screenShakeEnabled);
         
         // Save structure settings
         String[] structureTypes = {
@@ -204,9 +236,20 @@ public class ConfigManager {
         config.set("advanced.min_appearance_distance", minAppearanceDistance);
         config.set("advanced.max_appearance_distance", maxAppearanceDistance);
         
+        // Save effects settings
         config.set("effects.ambient_sounds", ambientSoundsEnabled);
         config.set("effects.ambient_sound_frequency", ambientSoundFrequency);
         config.set("effects.ambient_sound_chance", ambientSoundChance);
+        
+        // Save paranoia settings
+        config.set("paranoia.enabled", paranoiaEnabled);
+        config.set("paranoia.initial_exposure", initialExposure);
+        config.set("paranoia.exposure_growth_rate", exposureGrowthRate);
+        config.set("paranoia.far_appearance_distance", farAppearanceDistance);
+        config.set("paranoia.distant_silhouettes", distantSilhouettesEnabled);
+        config.set("paranoia.peripheral_appearances", peripheralAppearancesEnabled);
+        config.set("paranoia.vanish_when_seen_chance", vanishWhenSeenChance);
+        config.set("paranoia.adaptive_effects", adaptiveEffectsEnabled);
         
         try {
             config.save(new java.io.File(plugin.getDataFolder(), "config.yml"));
@@ -516,6 +559,88 @@ public class ConfigManager {
 
     public void setAmbientSoundChance(double chance) {
         this.ambientSoundChance = Math.min(1.0, Math.max(0.0, chance));
+        saveConfig();
+    }
+
+    // Paranoia getters and setters
+    public boolean isParanoiaEnabled() {
+        return paranoiaEnabled;
+    }
+
+    public void setParanoiaEnabled(boolean enabled) {
+        this.paranoiaEnabled = enabled;
+        saveConfig();
+    }
+
+    public double getInitialExposure() {
+        return initialExposure;
+    }
+
+    public void setInitialExposure(double exposure) {
+        this.initialExposure = Math.min(1.0, Math.max(0.0, exposure));
+        saveConfig();
+    }
+
+    public double getExposureGrowthRate() {
+        return exposureGrowthRate;
+    }
+
+    public void setExposureGrowthRate(double rate) {
+        this.exposureGrowthRate = Math.min(1.0, Math.max(0.001, rate));
+        saveConfig();
+    }
+
+    public int getFarAppearanceDistance() {
+        return farAppearanceDistance;
+    }
+
+    public void setFarAppearanceDistance(int distance) {
+        this.farAppearanceDistance = Math.max(maxAppearanceDistance + 5, distance);
+        saveConfig();
+    }
+
+    public boolean isDistantSilhouettesEnabled() {
+        return distantSilhouettesEnabled;
+    }
+
+    public void setDistantSilhouettesEnabled(boolean enabled) {
+        this.distantSilhouettesEnabled = enabled;
+        saveConfig();
+    }
+
+    public boolean isPeripheralAppearancesEnabled() {
+        return peripheralAppearancesEnabled;
+    }
+
+    public void setPeripheralAppearancesEnabled(boolean enabled) {
+        this.peripheralAppearancesEnabled = enabled;
+        saveConfig();
+    }
+
+    public double getVanishWhenSeenChance() {
+        return vanishWhenSeenChance;
+    }
+
+    public void setVanishWhenSeenChance(double chance) {
+        this.vanishWhenSeenChance = Math.min(1.0, Math.max(0.0, chance));
+        saveConfig();
+    }
+
+    public boolean isAdaptiveEffectsEnabled() {
+        return adaptiveEffectsEnabled;
+    }
+
+    public void setAdaptiveEffectsEnabled(boolean enabled) {
+        this.adaptiveEffectsEnabled = enabled;
+        saveConfig();
+    }
+
+    public boolean isScreenShakeEnabled() {
+        return screenShakeEnabled;
+    }
+
+    public void setScreenShakeEnabled(boolean enabled) {
+        this.screenShakeEnabled = enabled;
         saveConfig();
     }
 } 

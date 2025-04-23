@@ -53,6 +53,8 @@ effects:
   torch_conversion_chance: 0.7
   # Chance to remove torches completely (0.0 - 1.0)
   torch_removal_chance: 0.3
+  # Enable/disable screen shake effects
+  screen_shake_enabled: true
 
 # Structure settings
 structures:
@@ -100,10 +102,29 @@ structures:
     depth: 5  # Blocks below surface
   
   wooden_crosses:
-    height: 4  # Height of the cross
+    height: 3  # Height of the cross
   
   tripwire_traps:
     tnt_count: 4  # Number of TNT blocks
+
+# Paranoia system settings
+paranoia:
+  # Enable/disable the paranoia system
+  enabled: true
+  # Base exposure level for new players (0.0 - 1.0)
+  initial_exposure: 0.1
+  # How quickly exposure increases with each encounter (0.0 - 1.0)
+  exposure_growth_rate: 0.05
+  # Maximum distance for subtle appearances (further than normal appearances)
+  far_appearance_distance: 50
+  # Enable distant silhouette appearances
+  distant_silhouettes: true
+  # Enable peripheral vision appearances (only visible when not looking directly)
+  peripheral_appearances: true
+  # Chance for Herobrine to disappear when looked at directly (0.0 - 1.0)
+  vanish_when_seen_chance: 0.8
+  # Enable/disable exposure-based effects intensity
+  adaptive_effects: true
 
 # Advanced settings
 advanced:

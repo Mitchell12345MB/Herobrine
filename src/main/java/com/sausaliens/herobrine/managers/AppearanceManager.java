@@ -30,6 +30,7 @@ import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Vector;
 import org.bukkit.Particle;
+import org.bukkit.Sound;
 
 import java.util.*;
 
@@ -89,6 +90,9 @@ public class AppearanceManager implements Listener {
                     // Create appearance with delay based on player's context
                     scheduleAppearanceForPlayer(player, memory);
                 }
+                
+                // Check for paranoia-based appearances (if enabled)
+                checkParanoiaAppearances(player, memory);
             }
         }, frequency, frequency);
     }
@@ -119,6 +123,11 @@ public class AppearanceManager implements Listener {
         Location location = findAppearanceLocation(player);
         if (location == null) return;
         createAppearance(player, location);
+        
+        // Record encounter for paranoia system
+        if (plugin.getParanoiaManager() != null) {
+            plugin.getParanoiaManager().recordEncounter(player, ParanoiaManager.EncounterType.DIRECT);
+        }
     }
 
     public void createAppearance(Player player, Location location) {
@@ -200,7 +209,7 @@ public class AppearanceManager implements Listener {
                 ticksExisted++;
                 Location npcLoc = npc.getEntity().getLocation();
                 Location playerLoc = player.getLocation();
-                double distanceToPlayer = npcLoc.distance(playerLoc);
+                double distanceToPlayer = calculateSafeDistance(npcLoc, playerLoc);
                 
                 // Check if player is too close (within 10 blocks)
                 if (distanceToPlayer < 10) {
@@ -282,6 +291,17 @@ public class AppearanceManager implements Listener {
                     if (isPlayerLookingAt(player, npcLoc)) {
                         // More sophisticated response to being spotted
                         memory.spottedCount++;
+                        
+                        // Check paranoia system for vanish chance
+                        if (plugin.getParanoiaManager() != null && 
+                            plugin.getParanoiaManager().shouldVanishWhenSeen(player)) {
+                            // Vanish dramatically
+                            player.playSound(npcLoc, Sound.ENTITY_ENDERMAN_TELEPORT, 0.5f, 0.5f);
+                            player.spawnParticle(Particle.CLOUD, npcLoc, 20, 0.5, 1, 0.5, 0.1);
+                            removeAppearance(player);
+                            cancel();
+                            return;
+                        }
                         
                         // Adjust reaction based on how often this player spots Herobrine
                         if (memory.spottedCount < 5) {
@@ -458,31 +478,61 @@ public class AppearanceManager implements Listener {
 
     private Location findAppearanceLocation(Player player) {
         Location playerLoc = player.getLocation();
-        int attempts = 0;
-        int maxAttempts = 10;
-
-        while (attempts++ < maxAttempts) {
-            double angle = random.nextDouble() * 2 * Math.PI;
-            double distance = 10 + random.nextDouble() * 15; // Between 10-25 blocks away
+        int minDist = plugin.getConfigManager().getMinAppearanceDistance();
+        int maxDist = plugin.getConfigManager().getMaxAppearanceDistance();
+        
+        // Check if we should use a far appearance distance from paranoia system
+        if (plugin.getParanoiaManager() != null && 
+            plugin.getParanoiaManager().shouldCreateDistantAppearance(player)) {
+            // Use farAppearanceDistance instead
+            maxDist = plugin.getParanoiaManager().getFarAppearanceDistance(player);
+        }
+        
+        // Try multiple positions to find a valid location
+        for (int i = 0; i < 10; i++) {
+            // Choose random distance between min and max
+            double distance = minDist + random.nextDouble() * (maxDist - minDist);
             
-            Location loc = playerLoc.clone().add(
-                Math.cos(angle) * distance,
-                0,
-                Math.sin(angle) * distance
-            );
-
-            // Find the highest block at this location
-            loc.setY(loc.getWorld().getHighestBlockYAt(loc));
-
-            if (loc.getBlock().getType().isSolid()) {
-                loc.add(0, 1, 0);
-                // Make Herobrine face the player
-                Vector direction = playerLoc.toVector().subtract(loc.toVector()).normalize();
-                loc.setDirection(direction);
+            // Choose random angle
+            double angle = random.nextDouble() * 2 * Math.PI;
+            
+            // Calculate position at that distance and angle
+            double x = Math.sin(angle) * distance;
+            double z = Math.cos(angle) * distance;
+            
+            Location loc = playerLoc.clone().add(x, 0, z);
+            
+            // Adjust Y to ground level
+            int highestY = loc.getWorld().getHighestBlockYAt(loc);
+            loc.setY(highestY + 1); // +1 to stand on top of the block
+            
+            // Check if this location is suitable
+            if (isSuitableLocation(loc, player)) {
                 return loc;
             }
         }
+        
+        // Couldn't find a suitable location
         return null;
+    }
+
+    private boolean isSuitableLocation(Location location, Player player) {
+        // Check if the location is safe
+        if (!isLocationSafe(location)) {
+            return false;
+        }
+        
+        // Check if the location is dark
+        if (isEnvironmentDark(player)) {
+            return false;
+        }
+        
+        // Check if the location is isolated
+        if (isPlayerIsolated(player)) {
+            return false;
+        }
+        
+        return true;
     }
 
     private void removeAppearance(Player player) {
@@ -534,7 +584,7 @@ public class AppearanceManager implements Listener {
                 PlayerMemory memory = getPlayerMemory(player);
                 
                 // Track if player is chasing Herobrine
-                if (player.isSprinting() && playerLoc.distance(npcLoc) < 15) {
+                if (player.isSprinting() && calculateSafeDistance(playerLoc, npcLoc) < 15) {
                     // Mark player as having chased Herobrine
                     memory.chaseCount++;
                     if (memory.chaseCount >= 3) {
@@ -550,7 +600,7 @@ public class AppearanceManager implements Listener {
                 
                 // If player is looking directly at Herobrine and is within 20 blocks, higher chance to vanish
                 if (isPlayerLookingAt(player, npcLoc) && 
-                    playerLoc.distance(npcLoc) < 20) {
+                    calculateSafeDistance(playerLoc, npcLoc) < 20) {
                     
                     // Adjust vanish chance based on memory
                     double vanishChance = 0.4;
@@ -676,7 +726,7 @@ public class AppearanceManager implements Listener {
         // Search for any Herobrine entities within 50 blocks of the player
         for (Entity entity : player.getWorld().getEntities()) {
             // Check if the entity is a NPC/Citizens entity with Herobrine traits
-            if (entity.hasMetadata("NPC") && entity.getLocation().distance(player.getLocation()) < 50) {
+            if (entity.hasMetadata("NPC") && calculateSafeDistance(entity.getLocation(), player.getLocation()) < 50) {
                 // Check if this NPC is a Herobrine entity
                 if (entity.hasMetadata("herobrine")) {
                     return true;
@@ -1050,7 +1100,7 @@ public class AppearanceManager implements Listener {
         if (tracking == null || !player.isOnline()) return;
         
         // Calculate distance to structure
-        double distance = player.getLocation().distance(location);
+        double distance = calculateSafeDistance(player.getLocation(), location);
         
         // Check if player has seen the structure (came within 15 blocks)
         if (distance < 15) {
@@ -1120,7 +1170,7 @@ public class AppearanceManager implements Listener {
         
         for (Player player : Bukkit.getOnlinePlayers()) {
             if (player.getWorld().equals(location.getWorld())) {
-                double distance = player.getLocation().distance(location);
+                double distance = calculateSafeDistance(player.getLocation(), location);
                 if (distance < nearestDistance) {
                     nearestPlayer = player;
                     nearestDistance = distance;
@@ -1614,7 +1664,7 @@ public class AppearanceManager implements Listener {
     private boolean isPlayerIsolated(Player player) {
         // Check if player is alone (no other players nearby)
         for (Player otherPlayer : player.getWorld().getPlayers()) {
-            if (otherPlayer != player && otherPlayer.getLocation().distance(player.getLocation()) < 50) {
+            if (otherPlayer != player && calculateSafeDistance(otherPlayer.getLocation(), player.getLocation()) < 50) {
                 return false; // Not isolated - other players are nearby
             }
         }
@@ -1625,5 +1675,149 @@ public class AppearanceManager implements Listener {
         
         // Being underground increases the feeling of isolation
         return isUnderground || player.getWorld().getTime() > 13000; // Underground or nighttime
+    }
+
+    /**
+     * Check if paranoia-based appearances (distant or peripheral) should be created
+     * @param player The player
+     * @param memory The player's memory
+     */
+    private void checkParanoiaAppearances(Player player, PlayerMemory memory) {
+        // Skip if player already has an active appearance
+        if (activeAppearances.containsKey(player.getUniqueId())) {
+            return;
+        }
+        
+        ParanoiaManager paranoiaManager = plugin.getParanoiaManager();
+        if (paranoiaManager == null) return;
+        
+        // Check for distant silhouette appearances
+        if (paranoiaManager.shouldCreateDistantAppearance(player)) {
+            createDistantAppearance(player);
+            return;
+        }
+        
+        // Check for peripheral vision appearances
+        if (paranoiaManager.shouldCreatePeripheralAppearance(player)) {
+            createPeripheralAppearance(player);
+            return;
+        }
+    }
+    
+    /**
+     * Create a distant silhouette appearance of Herobrine
+     * @param player The player to create the appearance for
+     */
+    private void createDistantAppearance(Player player) {
+        // Get a far distance based on player's exposure level
+        int distance = plugin.getParanoiaManager().getFarAppearanceDistance(player);
+        
+        // Find a valid location for the distant appearance
+        Location playerLoc = player.getLocation();
+        
+        // Choose random angle
+        double angle = Math.random() * 2 * Math.PI;
+        
+        // Calculate position at that distance and angle
+        double x = Math.sin(angle) * distance;
+        double z = Math.cos(angle) * distance;
+        
+        Location targetLoc = playerLoc.clone().add(x, 0, z);
+        
+        // Adjust Y to ground level
+        targetLoc.setY(targetLoc.getWorld().getHighestBlockYAt(targetLoc) + 1);
+        
+        // Create the appearance
+        createAppearance(player, targetLoc);
+        
+        // Record the distant encounter in paranoia system
+        plugin.getParanoiaManager().recordEncounter(player, ParanoiaManager.EncounterType.DISTANT);
+        
+        // Schedule quick disappearance
+        final UUID playerId = player.getUniqueId();
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            if (activeAppearances.containsKey(playerId)) {
+                removeAppearance(Bukkit.getPlayer(playerId));
+            }
+        }, 100L); // 5 seconds
+    }
+    
+    /**
+     * Create a peripheral vision appearance (only visible from the corner of the eye)
+     * @param player The player to create the appearance for
+     */
+    private void createPeripheralAppearance(Player player) {
+        Location playerLoc = player.getLocation();
+        double playerYaw = Math.toRadians(playerLoc.getYaw());
+        
+        // Calculate position 90 degrees to the side of player's view
+        double sideAngle = playerYaw + (Math.PI / 2) * (Math.random() > 0.5 ? 1 : -1);
+        double distance = 15 + (Math.random() * 10); // 15-25 blocks away
+        
+        double x = Math.sin(sideAngle) * distance;
+        double z = Math.cos(sideAngle) * distance;
+        
+        Location targetLoc = playerLoc.clone().add(x, 0, z);
+        
+        // Adjust Y to ground level
+        targetLoc.setY(targetLoc.getWorld().getHighestBlockYAt(targetLoc) + 1);
+        
+        // Create the appearance
+        createAppearance(player, targetLoc);
+        
+        // Record the peripheral encounter in paranoia system
+        plugin.getParanoiaManager().recordEncounter(player, ParanoiaManager.EncounterType.PERIPHERAL);
+        
+        // Set up a task to check if player is looking directly at Herobrine
+        final UUID playerId = player.getUniqueId();
+        new BukkitRunnable() {
+            int ticks = 0;
+            
+            @Override
+            public void run() {
+                Player p = Bukkit.getPlayer(playerId);
+                if (p == null || !p.isOnline() || !activeAppearances.containsKey(playerId)) {
+                    cancel();
+                    return;
+                }
+                
+                NPC npc = activeAppearances.get(playerId);
+                if (!npc.isSpawned()) {
+                    cancel();
+                    return;
+                }
+                
+                // If player looks directly at Herobrine, check if he should vanish
+                if (isPlayerLookingAt(p, npc.getEntity().getLocation())) {
+                    if (plugin.getParanoiaManager().shouldVanishWhenSeen(p)) {
+                        removeAppearance(p);
+                        cancel();
+                    }
+                }
+                
+                // Auto-disappear after a while
+                ticks++;
+                if (ticks >= 200) { // 10 seconds max
+                    removeAppearance(p);
+                    cancel();
+                }
+            }
+        }.runTaskTimer(plugin, 5L, 5L);
+    }
+
+    /**
+     * Safely calculates distance between two locations, handling cross-dimension cases
+     * @param loc1 First location
+     * @param loc2 Second location
+     * @return Distance between locations, or a large value if in different worlds
+     */
+    private double calculateSafeDistance(Location loc1, Location loc2) {
+        // If locations are in different worlds, return a large distance
+        if (loc1 == null || loc2 == null || !loc1.getWorld().equals(loc2.getWorld())) {
+            return Double.MAX_VALUE; // Essentially "infinite" distance
+        }
+        
+        // Safe to calculate distance when in the same world
+        return loc1.distance(loc2);
     }
 } 
